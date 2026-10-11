@@ -1,14 +1,8 @@
-import { LibsqlDatabase } from '@libsql/client';
 import ExcelJS from 'exceljs';
 
 export default {
   async GET(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      const turso = new LibsqlDatabase({
-        url: process.env.TURSO_DATABASE_URL!,
-        authToken: process.env.TURSO_AUTH_TOKEN!
-      });
-
       const url = new URL(request.url);
       const search = url.searchParams.get('search') ?? '';
       const category = url.searchParams.get('category') ?? '';
@@ -51,34 +45,33 @@ export default {
       }
 
       // Fetch all matching items (no pagination for export)
-      const dataResult = await turso.execute(
-        `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku`,
-        params
-      );
+      const dataResult = await env.DB.prepare(
+        `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku`
+      ).bind(...params).all();
 
       const today = new Date();
       const dateStr = today.toISOString().split('T')[0];
 
       // Transform rows
-      const rows = dataResult.rows.map((row: any) => ({
-        id: row[0],
-        facility_id: row[1],
-        sku: row[2],
-        name: row[3],
-        description: row[4],
-        category: row[5],
-        quantity: Number(row[6]),
-        min_threshold: Number(row[7]),
-        max_threshold: Number(row[8]),
-        bin_location: row[9],
-        production_date: row[10],
-        expiry_date: row[11],
-        image_url: row[12],
-        creator_id: row[13],
-        updater_id: row[14],
-        created_at: row[15],
-        updated_at: row[16],
-        specification: row[17] ?? null // NEW: specification column
+      const rows = dataResult.results.map((row: any) => ({
+        id: row.id,
+        facility_id: row.facility_id,
+        sku: row.sku,
+        name: row.name,
+        description: row.description,
+        category: row.category,
+        quantity: Number(row.quantity),
+        min_threshold: Number(row.min_threshold),
+        max_threshold: Number(row.max_threshold),
+        bin_location: row.bin_location,
+        production_date: row.production_date,
+        expiry_date: row.expiry_date,
+        image_url: row.image_url,
+        creator_id: row.creator_id,
+        updater_id: row.updater_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        specification: row.specification ?? null // NEW: specification column
       }));
 
       // Generate CSV

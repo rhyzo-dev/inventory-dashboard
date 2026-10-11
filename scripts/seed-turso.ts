@@ -1,27 +1,26 @@
 #!/usr/bin/env tsx
-import { LibsqlDatabase } from '@libsql/client';
+import { execSync } from 'child_process';
 
-// This script can be used to seed initial data into Turso
+// This script can be used to seed initial data into D1
 // Run with: npm run seed
 
 async function main() {
-  const turso = new LibsqlDatabase({
-    url: process.env.TURSO_DATABASE_URL!,
-    authToken: process.env.TURSO_AUTH_TOKEN!
-  });
-
   // Check if we already have data
-  const countResult = await turso.execute('SELECT COUNT(*) FROM consumable_item');
-  const count = Number(countResult.rows[0][0]);
+  try {
+    const result = execSync('npx wrangler d1 execute inventory-dashboard --command "SELECT COUNT(*) FROM consumable_item"', { encoding: 'utf-8' });
+    const count = JSON.parse(result.trim()).results[0]['COUNT(*)'];
 
-  if (count > 0) {
-    console.log(`Database already has ${count} items. Skipping seed.`);
-    return;
+    if (count > 0) {
+      console.log(`Database already has ${count} items. Skipping seed.`);
+      return;
+    }
+  } catch (error) {
+    console.error('Error checking database:', error.message);
+    // Continue with seed anyway
   }
 
   console.log('Seeding initial data...');
 
-  // Sample data - in practice you might load from CSV or existing database
   const facilityId = process.env.FACILITY_ID || '00000000-0000-0000-0000-000000000001';
 
   const sampleItems = [
@@ -74,34 +73,14 @@ async function main() {
 
   // Insert items
   for (const item of sampleItems) {
-    await turso.execute(
-      `INSERT INTO consumable_item (
-        id, facility_id, sku, name, description, category, quantity,
-        min_threshold, max_threshold, bin_location, production_date,
-        expiry_date, image_url, creator_id, updater_id, created_at, updated_at
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')
-      )`,
-      [
-        crypto.randomUUID(),
-        facilityId,
-        item.sku,
-        item.name,
-        item.description,
-        item.category,
-        item.quantity,
-        item.min_threshold,
-        item.max_threshold,
-        item.bin_location,
-        item.production_date,
-        item.expiry_date,
-        item.image_url,
-        item.creator_id,
-        item.updater_id
-      ]
-    );
+    const command = `npx wrangler d1 execute inventory-dashboard --command "INSERT INTO consumable_item (id, facility_id, sku, name, description, category, quantity, min_threshold, max_threshold, bin_location, production_date, expiry_date, image_url, creator_id, updater_id, created_at, updated_at) VALUES ('${crypto.randomUUID()}', '${facilityId}', '${item.sku}', '${item.name}', '${item.description}', '${item.category}', ${item.quantity}, ${item.min_threshold}, ${item.max_threshold}, '${item.bin_location}', '${item.production_date}', '${item.expiry_date || null}', '${item.image_url || null}', '${item.creator_id}', '${item.updater_id}', datetime('now'), datetime('now'))"`;
 
-    console.log(`Inserted: ${item.sku} - ${item.name}`);
+    try {
+      execSync(command, { encoding: 'utf-8', stdio: 'ignore' });
+      console.log(`Inserted: ${item.sku} - ${item.name}`);
+    } catch (error) {
+      console.error(`Failed to insert ${item.sku}:`, error.message);
+    }
   }
 
   console.log('Seeding complete!');

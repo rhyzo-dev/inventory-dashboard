@@ -1,4 +1,3 @@
-import { LibsqlDatabase } from '@libsql/client';
 import { S3Client } from '@aws-sdk/client-s3';
 
 // Types matching our Turso schema
@@ -21,12 +20,6 @@ interface ConsumableItem {
   created_at: string;
   updated_at: string;
 }
-
-// Initialize Turso client
-const turso = new LibsqlDatabase({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!
-});
 
 // Initialize Tigris S3 client
 const s3 = new S3Client({
@@ -84,38 +77,36 @@ export default {
       }
 
       // Count total
-      const countResult = await turso.execute(
-        `SELECT COUNT(*) FROM consumable_item WHERE ${whereSql}`,
-        params
-      );
-      const total = Number(countResult.rows[0][0]);
+      const countResult = await env.DB.prepare(
+        `SELECT COUNT(*) FROM consumable_item WHERE ${whereSql}`
+      ).bind(...params).all();
+      const total = Number(countResult.results[0]['COUNT(*)']);
 
       // Fetch paginated data
       const offset = (page - 1) * limit;
-      const dataResult = await turso.execute(
-        `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
-      );
+      const dataResult = await env.DB.prepare(
+        `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku LIMIT ? OFFSET ?`
+      ).bind(...params, limit, offset).all();
 
       // Transform to frontend-friendly format
-      const items = dataResult.rows.map((row: any) => ({
-        id: row[0],
-        facility_id: row[1],
-        sku: row[2],
-        name: row[3],
-        description: row[4],
-        category: row[5],
-        quantity: Number(row[6]),
-        min_threshold: Number(row[7]),
-        max_threshold: Number(row[8]),
-        bin_location: row[9],
-        production_date: row[10],
-        expiry_date: row[11],
-        image_url: row[12],
-        creator_id: row[13],
-        updater_id: row[14],
-        created_at: row[15],
-        updated_at: row[16]
+      const items = dataResult.results.map((row: any) => ({
+        id: row.id,
+        facility_id: row.facility_id,
+        sku: row.sku,
+        name: row.name,
+        description: row.description,
+        category: row.category,
+        quantity: Number(row.quantity),
+        min_threshold: Number(row.min_threshold),
+        max_threshold: Number(row.max_threshold),
+        bin_location: row.bin_location,
+        production_date: row.production_date,
+        expiry_date: row.expiry_date,
+        image_url: row.image_url,
+        creator_id: row.creator_id,
+        updater_id: row.updater_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at
       }));
 
       // Calculate stats for summary cards

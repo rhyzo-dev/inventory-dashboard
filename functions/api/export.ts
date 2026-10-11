@@ -1,4 +1,5 @@
 import { LibsqlDatabase } from '@libsql/client';
+import ExcelJS from 'exceljs';
 
 export default {
   async GET(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -25,9 +26,9 @@ export default {
       }
 
       if (search) {
-        whereSql += ' AND (sku LIKE ? OR name LIKE ? OR bin_location LIKE ? OR category LIKE ?)';
+        whereSql += ' AND (sku LIKE ? OR name LIKE ? OR bin_location LIKE ? OR category LIKE ? OR specification LIKE ?)';
         const searchTerm = `%${search}%`;
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+        params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
       }
 
       if (category) {
@@ -55,10 +56,35 @@ export default {
         params
       );
 
+      const today = new Date();
+      const dateStr = today.toISOString().split('T')[0];
+
+      // Transform rows
+      const rows = dataResult.rows.map((row: any) => ({
+        id: row[0],
+        facility_id: row[1],
+        sku: row[2],
+        name: row[3],
+        description: row[4],
+        category: row[5],
+        quantity: Number(row[6]),
+        min_threshold: Number(row[7]),
+        max_threshold: Number(row[8]),
+        bin_location: row[9],
+        production_date: row[10],
+        expiry_date: row[11],
+        image_url: row[12],
+        creator_id: row[13],
+        updater_id: row[14],
+        created_at: row[15],
+        updated_at: row[16],
+        specification: row[17] ?? null // NEW: specification column
+      }));
+
       // Generate CSV
       if (format === 'csv') {
         const headers = [
-          'SKU', 'Name', 'Description', 'Category',
+          'SKU', 'Name', 'Specification', 'Category',
           'Quantity', 'Min Threshold', 'Max Threshold', 'Status',
           'Bin Location', 'Production Date', 'Expiry Date', 'Days to Expiry',
           'Image URL', 'Created At', 'Updated At'
@@ -66,44 +92,40 @@ export default {
 
         const csvRows = [headers.join(',')];
 
-        const today = new Date();
-        const thirtyDaysLater = new Date(today);
-        thirtyDaysLater.setDate(today.getDate() + 30);
-
-        dataResult.rows.forEach((row: any) => {
-          const quantity = Number(row[6]);
-          const minThreshold = Number(row[7]);
+        rows.forEach((row: any) => {
+          const quantity = row.quantity;
+          const minThreshold = row.min_threshold;
           const statusLabel = quantity <= 0 ? 'Out of Stock' : quantity < minThreshold ? 'Low Stock' : 'Adequate';
 
-          const productionDate = row[10] ? new Date(row[10]).toISOString().split('T')[0] : '';
-          const expiryDate = row[11] ? new Date(row[11]).toISOString().split('T')[0] : '';
+          const productionDate = row.production_date ? new Date(row.production_date).toISOString().split('T')[0] : '';
+          const expiryDate = row.expiry_date ? new Date(row.expiry_date).toISOString().split('T')[0] : '';
           const daysToExpiry = expiryDate
             ? Math.ceil((new Date(expiryDate).getTime() - today.getTime()) / (1000 * 3600 * 24))
             : '';
 
           const rowData = [
-            `"${row[2]}"`, // SKU
-            `"${row[3]}"`, // Name
-            `"${row[4] ?? ''}"`, // Description
-            `"${row[5] ?? ''}"`, // Category
-            quantity, // Quantity
-            minThreshold, // Min Threshold
-            Number(row[8]), // Max Threshold
-            `"${statusLabel}"`, // Status
-            `"${row[9] ?? ''}"`, // Bin Location
-            productionDate, // Production Date
-            expiryDate, // Expiry Date
-            daysToExpiry !== '' ? daysToExpiry.toString() : '', // Days to Expiry
-            `"${row[12] ?? ''}"`, // Image URL
-            row[15] ? new Date(row[15]).toISOString().replace('T', ' ').split('.')[0] : '', // Created At
-            row[16] ? new Date(row[16]).toISOString().replace('T', ' ').split('.')[0] : '' // Updated At
+            `"${row.sku}"`,
+            `"${row.name}"`,
+            `"${row.specification ?? ''}"`,
+            `"${row.category ?? ''}"`,
+            quantity,
+            minThreshold,
+            row.max_threshold,
+            `"${statusLabel}"`,
+            `"${row.bin_location ?? ''}"`,
+            productionDate,
+            expiryDate,
+            daysToExpiry !== '' ? daysToExpiry.toString() : '',
+            `"${row.image_url ?? ''}"`,
+            row.created_at ? new Date(row.created_at).toISOString().replace('T', ' ').split('.')[0] : '',
+            row.updated_at ? new Date(row.updated_at).toISOString().replace('T', ' ').split('.')[0] : ''
           ];
 
           csvRows.push(rowData.join(','));
         });
 
         const csvContent = csvRows.join('\r\n');
-        const filename = `inventory_export_${today.toISOString().split('T')[0]}.csv`;
+        const filename = `inventory_export_${dateStr}.csv`;
 
         return new Response(csvContent, {
           headers: {
@@ -112,16 +134,106 @@ export default {
           }
         });
       }
-      // For Excel export, we could use a library like exceljs, but for simplicity
-      // we'll return CSV with .xlsx extension or note that Excel generation
-      // would require bundling a library (increasing function size)
-      else {
-        // Fallback to CSV for now - in a production app you'd bundle exceljs or similar
-        return new Response('Excel export not implemented in this lightweight version. Use CSV instead.', {
-          status: 501,
-          headers: { 'Content-Type': 'text/plain' }
+
+      // Generate Excel (.xlsx) using exceljs
+      if (format === 'xlsx') {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Arctech TT Plant Inventory Dashboard';
+        workbook.created = new Date();
+
+        const worksheet = workbook.addWorksheet('Inventory Export');
+
+        // Define columns per user requirements: Item Code, Item Name, Specification, Location, Manufacturing Date, Expiration Date, Current Quantity
+        worksheet.columns = [
+          { header: 'Item Code (SKU)', key: 'sku', width: 18 },
+          { header: 'Item Name', key: 'name', width: 30 },
+          { header: 'Specification', key: 'specification', width: 40 },
+          { header: 'Location', key: 'bin_location', width: 20 },
+          { header: 'Manufacturing Date', key: 'production_date', width: 18 },
+          { header: 'Expiration Date', key: 'expiry_date', width: 18 },
+          { header: 'Current Quantity', key: 'quantity', width: 16 }
+        ];
+
+        // Style header row
+        worksheet.getRow(1).font = { bold: true, size: 11 };
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF2563EB' }
+        };
+        worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // Add data rows
+        rows.forEach((row: any) => {
+          const productionDate = row.production_date ? new Date(row.production_date).toISOString().split('T')[0] : '';
+          const expiryDate = row.expiry_date ? new Date(row.expiry_date).toISOString().split('T')[0] : '';
+
+          worksheet.addRow({
+            sku: row.sku,
+            name: row.name,
+            specification: row.specification ?? '',
+            bin_location: row.bin_location ?? '',
+            production_date: productionDate,
+            expiry_date: expiryDate,
+            quantity: row.quantity
+          });
+        });
+
+        // Style data rows - alternate colors + status-based formatting
+        worksheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return; // Skip header
+
+          row.alignment = { vertical: 'middle' };
+          row.height = 20;
+
+          // Alternate row colors
+          if (rowNumber % 2 === 0) {
+            row.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8FAFC' }
+            };
+          }
+
+          // Highlight low/out of stock in quantity column (column G = 7)
+          const qty = row.getCell(7).value as number;
+          const minThreshold = rows[rowNumber - 2]?.min_threshold ?? 0;
+          if (qty <= 0) {
+            row.getCell(7).font = { bold: true, color: { argb: 'FFDC2626' } };
+            row.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF2F2' } };
+          } else if (qty < minThreshold) {
+            row.getCell(7).font = { bold: true, color: { argb: 'FFF59E0B' } };
+            row.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3C7' } };
+          }
+        });
+
+        // Auto-filter
+        worksheet.autoFilter = {
+          from: { row: 1, column: 1 },
+          to: { row: 1, column: 7 }
+        };
+
+        // Freeze header row
+        worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // Generate buffer
+        const buffer = await workbook.xlsx.writeBuffer();
+        const filename = `inventory_export_${dateStr}.xlsx`;
+
+        return new Response(buffer, {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="${filename}"`
+          }
         });
       }
+
+      // Unknown format
+      return new Response('Unsupported format. Use format=csv or format=xlsx', {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain' }
+      });
     } catch (error) {
       console.error('Export API error:', error);
       return new Response(JSON.stringify({ error: 'Internal server error' }), {

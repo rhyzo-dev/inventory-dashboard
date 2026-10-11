@@ -1,0 +1,80 @@
+graph TD
+    %% Entry Point
+    A[User navigates to /] --> B[Loading Spinner<br/>Loading.tsx]
+    B --> C{API Success?}
+    C -->|Yes| D[Render Dashboard<br/>App.tsx]
+    C -->|No| E[Error State<br/>Retry Button]
+    E --> B
+
+    %% Dashboard Components
+    D --> F[Stat Cards<br/>StatsCards.tsx]
+    D --> G[Filters Bar<br/>Filters.tsx]
+    D --> H[Inventory Table<br/>InventoryTable.tsx]
+    D --> I[Pagination Controls]
+
+    %% Search Flow
+    G --> J[User types in Search<br/>onChange debounced 300ms]
+    J --> K[setFilters({search, page: 1})]
+    K --> L[fetchInventory()]
+    L --> M[GET /api/inventory?search=...&page=1]
+    M --> N[Update Table + Pagination]
+
+    %% Category Filter
+    G --> O[User selects Category<br/>onChange]
+    O --> K
+
+    %% Status Filter
+    G --> P[User selects Status<br/>onChange]
+    P --> K
+
+    %% View Filter
+    G --> Q[User selects View<br/>onChange]
+    Q --> K
+
+    %% Reset Filters
+    G --> R[Click Reset Filters<br/>onClick]
+    R --> S[setFilters(defaults)]
+    S --> L
+
+    %% Export
+    G --> T[Click Export CSV<br/>onClick anchor]
+    T --> U[GET /api/export?format=csv&filters...]
+    U --> V[Browser downloads file<br/>Content-Disposition: attachment]
+
+    %% Pagination
+    I --> W[Click Next/Prev<br/>onClick]
+    W --> X[setFilters({page: ±1})]
+    X --> L
+
+    I --> Y[Change Page Size<br/>onChange]
+    Y --> Z[setFilters({limit, page: 1})]
+    Z --> L
+
+    %% Table Interactions
+    H --> AA[Click Photo Thumbnail<br/>anchor target="_blank"]
+    AA --> AB[Open full-size image<br/>in new tab]
+
+    H --> AC[Click Column Header<br/>onClick - Desktop only]
+    AC --> AD[Sort cycle: Asc→Desc→None]
+    AD --> AE[Re-fetch with sort params]
+
+    H --> AF[Hover Row]
+    AF --> AG[Highlight row<br/>CSS :hover]
+
+    %% Responsive
+    D --> AH{Viewport < 640px?}
+    AH -->|Yes| AI[Mobile Layout:<br/>• Stacked stat cards (2/row)<br/>• Collapsible Filters <details><br/>• Card-per-row table]
+    AH -->|No| AJ[Desktop Layout:<br/>• 5-col stat cards<br/>• Inline filters<br/>• Full HTML table]
+
+    %% Styling
+    classDef entry fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    classDef error fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+    classDef action fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    classDef ui fill:#f1f5f9,stroke:#64748b,stroke-width:1px
+
+    class A entry
+    class D,F,G,H,I success
+    class E error
+    class J,O,P,Q,R,T,W,Y,AA,AC action
+    class B,K,L,M,N,S,U,X,Z,AB,AE,AG,AI,AJ ui

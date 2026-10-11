@@ -43,14 +43,14 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <h1 className="text-2xl font-bold text-gray-900">Inventory Dashboard</h1>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1">
         {!loading && data ? (
           <>
             <StatsCards stats={data.stats} />
@@ -82,6 +82,15 @@ function App() {
           <Loading />
         )}
       </main>
+
+      <footer className="bg-white border-t border-gray-200 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500">
+            <span>Arctech TT Plant</span>
+            <span className="mt-2 sm:mt-0">Developed by rhyzo</span>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

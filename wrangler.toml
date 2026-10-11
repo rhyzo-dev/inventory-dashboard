@@ -1,0 +1,26 @@
+name = "inventory-dashboard"
+main = "./index.html"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Turso
+TURSO_DATABASE_URL = "libsql://inventory-dashboard-wharctech.aws-eu-north-1.turso.io"
+TURSO_AUTH_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTE2MTk1MDAsImlkIjoiMDFhMTI0ZDYtZTIwMS03N2RlLWFhNGItOWFlMTBiZWRjNDI0Iiwia2lkIjoicGhMYXFXa0dUVFl0eGpjSmlEOXhIUE1naXdCY2VtcWJNQnhydnI1clhJSSIsInJpZCI6IjY0N2Y2N2Y2LTBmMzMtNDQ1Zi1hNDc5LWU4MjRlOGY4ZTZiMCJ9.yVI24-pWmFSDZcEgLTRiaY9yANrb80ce50xFMrp4M4jK1Qyjx1RL1bDcYJYIC97UzlxA2ciopX95bov28Ue3CQ"
+FACILITY_ID = "" # optional, if you want to scope to a facility; leave empty for all
+
+# Tigris Data
+TIGRIS_ACCESS_KEY_ID = "REDACTED"
+TIGRIS_SECRET_ACCESS_KEY = "REDACTED"
+TIGRIS_BUCKET = "inventory-dashboard"
+TIGRIS_ENDPOINT = "https://t3.storage.dev"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "inventory-dashboard"
+
+[upload]
+format = "files"
+dir = "./dist"
+
+[traffic]
+# splits for rollout if needed

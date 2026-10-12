@@ -22,5 +22,8 @@ database_id = "513a97a2-0242-46b0-99d3-f5b06a969a24"
 format = "files"
 dir = "./dist"
 
+[deploy]
+pages_build_output_dir = "dist"
+
 [traffic]
 # splits for rollout if needed

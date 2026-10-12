@@ -48,6 +48,9 @@ export const onRequestGet: PagesFunction = async (context) => {
       `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku`
     ).bind(...params).all();
 
+    // Helper: treat string "null" as actual null
+    const clean = (val: any) => val === 'null' ? null : val;
+
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
@@ -63,13 +66,13 @@ export const onRequestGet: PagesFunction = async (context) => {
       min_threshold: Number(row.min_threshold),
       max_threshold: Number(row.max_threshold),
       bin_location: row.bin_location,
-      production_date: row.production_date,
-      expiry_date: row.expiry_date,
-      image_url: row.image_url,
+      production_date: clean(row.production_date),
+      expiry_date: clean(row.expiry_date),
+      image_url: clean(row.image_url),
       creator_id: row.creator_id,
       updater_id: row.updater_id,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
+      created_at: clean(row.created_at),
+      updated_at: clean(row.updated_at),
       specification: row.specification ?? null // NEW: specification column
     }));
 

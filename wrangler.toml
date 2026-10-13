@@ -33,3 +33,8 @@ TIGRIS_ENDPOINT = "https://t3.storage.dev"
 binding = "DB"
 database_name = "inventory-dashboard"
 database_id = "513a97a2-0242-46b0-99d3-f5b06a969a24"
+
+# Per-IP rate limiting store (used by the inventory + upload handlers)
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "c26df1cd75ea4e81b89302042a2bc35e"

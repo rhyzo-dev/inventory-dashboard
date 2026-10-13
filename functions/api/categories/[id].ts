@@ -1,5 +1,8 @@
 /**
- * GET /api/categories — proxy for the list endpoint.
- * Handles the parameterized route for individual category operations.
+ * GET  /api/categories/[id] — get a single category (not implemented, falls through to list)
+ * PUT  /api/categories/[id] — update a category
+ * DELETE /api/categories/[id] — delete a category
  */
-export { onRequestGet as handleGet } from './categories'
+export { onRequestGet } from './categories'
+export { onRequestPut } from './categories'
+export { onRequestDelete } from './categories'

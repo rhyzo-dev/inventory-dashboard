@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category } from './lib/api'
+import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, toProxyImageUrl } from './lib/api'
 
 interface AppState {
   user: User | null
@@ -87,5 +87,10 @@ export async function fetchAllData(
     fetchInventory(search, category, status, view, page, limit),
     fetchStats(),
   ])
-  return { ...invRes, stats: statsRes }
+  // Normalize all Tigris direct URLs to proxy URLs for consistent image access
+  const items = (invRes.items || []).map(item => ({
+    ...item,
+    image_url: toProxyImageUrl(item.image_url),
+  }))
+  return { ...invRes, items, stats: statsRes }
 }

@@ -10,7 +10,8 @@
  * IMPORTANT: We use new Uint8Array(arrayBuffer) instead of Buffer.from() because
  *   Buffer is not available in the Cloudflare Workers runtime.
  *
- * IMPORTANT: We do NOT set ACL: 'public-read' — Tigris handles access differently.
+ * IMPORTANT: Images are served via /api/images/{key} proxy endpoint instead of direct Tigris URLs,
+because Tigris requires authentication for all object access (ACL: 'public-read' is not supported).
  *   Images are served directly from the Tigris endpoint URL.
  *
  * IMPORTANT: We do NOT use requestChecksumCalculation — it's not supported by
@@ -119,7 +120,8 @@ export const onRequestPost: PagesFunction = async (context) => {
       ACL: 'public-read',
     }))
 
-    const imageUrl = `${endpoint}/${bucket}/${objectKey}`
+    // Use proxy URL so images are served through our API (bypasses Tigris public access restrictions)
+    const imageUrl = `/api/images/${objectKey}`
 
     // If itemId provided, update the consumable_item record with the image URL
     if (itemId) {

@@ -68,6 +68,20 @@ export interface Category {
 const apiBase = '';
 const CRED = { credentials: 'include' } as const;
 
+/** Convert a direct Tigris URL to our proxy endpoint URL.
+ *  Tigris requires auth for all object access, so we serve images through our API instead.
+ *  e.g. https://t3.storage.dev/inventory-dashboard/items/xxx.jpg → /api/images/items/xxx.jpg
+ */
+export const toProxyImageUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null
+  // Already a proxy URL
+  if (url.startsWith('/api/images/')) return url
+  // Convert direct Tigris URL to proxy URL
+  const match = url.match(/\/inventory-dashboard\/(.+)$/)
+  if (match) return `/api/images/${match[1]}`
+  return url
+}
+
 function getHeaders(): Record<string, string> {
   return { 'Content-Type': 'application/json' };
 }

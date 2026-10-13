@@ -85,8 +85,9 @@ async function parseBody(request: Request): Promise<{ body: unknown; error?: Res
 /** Delete an object from Tigris/S3 given its full URL */
 async function deleteFromStorage(env: any, imageUrl: string): Promise<void> {
   if (!imageUrl || !env.TIGRIS_ENDPOINT || !env.TIGRIS_BUCKET || !env.TIGRIS_ACCESS_KEY_ID) return
-  // URL format: https://t3.storage.dev/bucket-name/items/...
+  // URL format: https://t3.storage.dev/inventory-dashboard/items/...
   const bucketName = env.TIGRIS_BUCKET
+  const parsed = new URL(imageUrl)
   const basePath = `/${bucketName}/`
   const keyStart = parsed.pathname.indexOf(basePath) + basePath.length
   const key = parsed.pathname.slice(keyStart)

@@ -42,7 +42,6 @@ export const onRequestPost: PagesFunction = async (context) => {
     }
 
     // ── Rate limit: 5 attempts per IP per minute ─────────────────────────────
-    const MINUTES_AGO = Math.floor(Date.now() / 60000)
     const lockoutResult = await env.DB.prepare(
       `SELECT COUNT(*) as cnt FROM login_attempts
        WHERE ip = ? AND attempted_at > datetime('now', '-15 minutes')`
@@ -88,7 +87,6 @@ export const onRequestPost: PagesFunction = async (context) => {
     if (!valid) {
       // Increment failed attempts
       const newCount = (user.failed_attempts || 0) + 1
-      const shouldLock = newCount >= 5
       await env.DB.prepare(
         `UPDATE users SET failed_attempts = ?, is_locked = CASE WHEN ? >= 5 THEN 1 ELSE is_locked END,
          locked_until = CASE WHEN ? >= 5 THEN datetime('now', '+15 minutes') ELSE locked_until END
@@ -116,14 +114,14 @@ export const onRequestPost: PagesFunction = async (context) => {
     // Store refresh token in D1
     await env.DB.prepare(
       'INSERT OR REPLACE INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)'
-    ).bind(tokens.refreshToken, user.id, tokens.expiresAt.toISOString()).run()
+    ).bind(tokens.refreshToken, user.id, tokens.expiresAt).run()
 
     // Set httpOnly cookies
     const setCookie = (name: string, value: string, maxAge: number) =>
-      `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict; ${env.NODE_ENV === 'development' ? 'SameSite=Lax' : ''}`
+      `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`
 
     const cookies = [
-      setCookie('auth_token', tokens.accessToken, tokens.expiresAt.getTime() / 1000),
+      setCookie('auth_token', tokens.accessToken, tokens.expiresAt),
       setCookie('refresh_token', tokens.refreshToken, 604800), // 7 days
     ].join(', ')
 

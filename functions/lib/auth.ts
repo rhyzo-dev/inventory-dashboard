@@ -32,11 +32,23 @@ function b64urlEncode(buffer: Uint8Array): string {
     .replace(/=+$/, '')
 }
 
-/** URL-safe base64 decode */
+/** Standard base64 decode (handles +/ and padding) */
+function b64Decode(str: string): Uint8Array {
+  return new Uint8Array(Array.from(atob(str), c => c.charCodeAt(0)))
+}
+
+/** URL-safe base64 decode (handles -_ and optional padding) */
 function b64urlDecode(str: string): Uint8Array {
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/')
   while (base64.length % 4) base64 += '='
-  return new Uint8Array(Array.from(atob(base64), c => c.charCodeAt(0)))
+  return b64Decode(base64)
+}
+
+/** Decode a hash string — auto-detects standard vs URL-safe base64 */
+function decodeHashPart(str: string): Uint8Array {
+  // If it contains + or / it's standard base64; otherwise URL-safe
+  if (/[+/]/.test(str)) return b64Decode(str)
+  return b64urlDecode(str)
 }
 
 /** Get current ISO timestamp */
@@ -80,7 +92,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const [saltStr, expectedHash] = stored.split(':')
   if (!saltStr || !expectedHash) return false
 
-  const salt = b64urlDecode(saltStr)
+  const salt = decodeHashPart(saltStr)
   const encoder = new TextEncoder()
 
   const keyMaterial = await crypto.subtle.importKey(
@@ -90,10 +102,14 @@ export async function verifyPassword(password: string, stored: string): Promise<
     { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     keyMaterial, KEY_BYTES * 8
   )
-  const hash = b64urlEncode(new Uint8Array(derivedBits))
 
-  // Constant-time comparison to prevent timing attacks
-  return constantTimeEqual(hash, expectedHash)
+  // Decode both to raw bytes and compare — ignores encoding format differences
+  const computedBytes = new Uint8Array(derivedBits)
+  const expectedBytes = decodeHashPart(expectedHash)
+  return constantTimeEqual(
+    b64urlEncode(computedBytes),
+    b64urlEncode(expectedBytes)
+  )
 }
 
 /** Compare two strings in constant time to prevent timing attacks */

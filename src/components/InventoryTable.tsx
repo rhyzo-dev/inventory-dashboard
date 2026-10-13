@@ -1,5 +1,5 @@
-import React from 'react';
-import { Package, AlertTriangle, AlertCircle, Calendar, Image, Trash2, Edit3, ExternalLink, Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import { Package, AlertTriangle, AlertCircle, Calendar, Image, Trash2, Edit3, Plus, Camera } from 'lucide-react';
 
 export interface InventoryItem {
   id: string;
@@ -64,6 +64,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   onRemoveImage,
   onAdd,
 }) => {
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+
   if (items.length === 0) {
     return (
       <div className="py-12 text-center text-gray-500">
@@ -99,8 +101,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[110px]">Image</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-[90px]">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -109,9 +111,15 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             const daysToExpiry = item.expiry_date
               ? Math.ceil((new Date(item.expiry_date).getTime() - Date.now()) / (1000 * 3600 * 24))
               : null;
+            const isHovered = hoveredItemId === item.id;
 
             return (
-              <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+              <tr
+                key={item.id}
+                className="hover:bg-gray-50 transition-colors"
+                onMouseEnter={() => setHoveredItemId(item.id)}
+                onMouseLeave={() => setHoveredItemId(null)}
+              >
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className="font-mono text-sm text-gray-900">{item.sku}</span>
                 </td>
@@ -156,39 +164,41 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {item.image_url ? (
-                    <div className="flex items-center gap-2">
+                    <div className="relative group/image">
                       <img
                         src={item.image_url}
                         alt={item.name}
-                        className="w-8 h-8 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-10 h-10 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => onViewImage(item)}
                         title="Click to view full size"
                       />
-                      <button
-                        onClick={() => onViewImage(item)}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
-                        View
-                      </button>
-                      {onRemoveImage && (
+                      {/* Remove button — visible on hover */}
+                      {isHovered && onRemoveImage && (
                         <button
-                          onClick={() => onRemoveImage(item)}
-                          className="text-xs text-red-400 hover:text-red-600 hover:underline"
+                          onClick={(e) => { e.stopPropagation(); onRemoveImage(item); }}
+                          className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover/image:opacity-100 transition-opacity shadow-sm"
                           title="Remove image"
                         >
-                          ✕
+                          <span className="text-xs leading-none">✕</span>
                         </button>
                       )}
                     </div>
                   ) : (
-                    <button
-                      onClick={() => onUploadImage(item)}
-                      className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
-                      title="Upload an image for this item"
-                    >
-                      <Image className="w-3.5 h-3.5" />
-                      Upload
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-10 h-10 rounded bg-gray-100 border border-dashed border-gray-300 flex items-center justify-center">
+                        <Image className="w-4 h-4 text-gray-300" />
+                      </div>
+                      <span className="text-xs text-gray-400">No photo</span>
+                      {onUploadImage && isHovered && (
+                        <button
+                          onClick={() => onUploadImage(item)}
+                          className="text-blue-500 hover:text-blue-700 transition-colors"
+                          title="Upload image"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-right">

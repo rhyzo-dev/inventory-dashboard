@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { X, Save, Loader2 } from 'lucide-react'
-import { updateItem, createItem, type UpdateItemInput, type CreateItemInput } from '../lib/api'
+import { X, Save, Loader2, Trash2 } from 'lucide-react'
+import { updateItem, createItem, removeImage, type UpdateItemInput, type CreateItemInput } from '../lib/api'
 
 interface EditModalProps {
   isOpen: boolean
@@ -30,6 +30,8 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [imagePreview, setImagePreview] = useState<string | null>(item?.image_url ?? null)
+  const [removingImage, setRemovingImage] = useState(false)
 
   useEffect(() => {
     if (item) {
@@ -46,10 +48,13 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
         expiry_date: item.expiry_date || '',
         specification: item.specification || '',
       })
+      setImagePreview(item.image_url ?? null)
     } else {
       setForm(emptyForm)
+      setImagePreview(null)
     }
     setErrors({})
+    setRemovingImage(false)
   }, [item, isOpen])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -75,6 +80,19 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
     return Object.keys(errs).length === 0
   }
 
+  const handleRemoveImage = async () => {
+    if (!item?.id) return
+    setRemovingImage(true)
+    try {
+      await removeImage(item.id)
+      setImagePreview(null)
+    } catch (e: any) {
+      onError(e.message || 'Failed to remove image')
+    } finally {
+      setRemovingImage(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
@@ -93,6 +111,8 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           production_date: form.production_date || null,
           expiry_date: form.expiry_date || null,
           specification: form.specification || null,
+          // Preserve existing image_url if not being changed
+          image_url: imagePreview,
         }
         await updateItem(item.id, updateData)
       } else {
@@ -108,6 +128,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           production_date: form.production_date || undefined,
           expiry_date: form.expiry_date || undefined,
           specification: form.specification || undefined,
+          image_url: imagePreview || undefined,
         }
         await createItem(createData)
       }
@@ -139,6 +160,31 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
             <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
+
+        {/* Image preview area */}
+        {imagePreview && (
+          <div className="px-6 pt-4">
+            <div className="relative inline-block group/img">
+              <img
+                src={imagePreview}
+                alt="Item photo"
+                className="w-24 h-24 rounded-lg object-cover border border-gray-200"
+              />
+              <button
+                onClick={handleRemoveImage}
+                disabled={removingImage}
+                className="absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white shadow-sm transition-colors disabled:opacity-50"
+                title="Remove image"
+              >
+                {removingImage ? (
+                  <span className="text-xs">⏳</span>
+                ) : (
+                  <Trash2 className="w-3 h-3" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">

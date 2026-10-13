@@ -3,6 +3,15 @@ import ExcelJS from 'exceljs';
 // Helper: treat string "null" as actual null
 const clean = (val: any) => val === 'null' ? null : val;
 
+// Convert direct Tigris URLs to proxy URLs so the CSV export contains working links
+const toProxyImageUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  if (url.startsWith('/api/images/')) return url;
+  const match = url.match(/\/inventory-dashboard\/(.+)$/);
+  if (match) return `/api/images/${match[1]}`;
+  return url;
+};
+
 export const onRequestGet: PagesFunction = async (context) => {
   try {
     const url = new URL(context.request.url);
@@ -65,7 +74,7 @@ export const onRequestGet: PagesFunction = async (context) => {
       bin_location: row.bin_location,
       production_date: clean(row.production_date),
       expiry_date: clean(row.expiry_date),
-      image_url: clean(row.image_url),
+      image_url: toProxyImageUrl(clean(row.image_url)),
       creator_id: row.creator_id,
       updater_id: row.updater_id,
       created_at: clean(row.created_at),

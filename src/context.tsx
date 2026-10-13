@@ -1,13 +1,15 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, toProxyImageUrl } from './lib/api'
+import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, fetchSettings, type AppSettings } from './lib/api'
 
 interface AppState {
   user: User | null
   loading: boolean
   categories: Category[]
+  settings: AppSettings
   login: (username: string, password: string) => Promise<void>
   doLogout: () => Promise<void>
   refreshCategories: () => Promise<void>
+  refreshSettings: () => Promise<void>
 }
 
 const AppContext = createContext<AppState | null>(null)
@@ -16,6 +18,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
+  const [settings, setSettings] = useState<AppSettings>({ company_name: 'Inventory Dashboard' })
 
   const initAuth = useCallback(async () => {
     try {
@@ -37,10 +40,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const initSettings = useCallback(async () => {
+    try {
+      const res = await fetchSettings()
+      setSettings(res)
+    } catch {
+      setSettings({ company_name: 'Inventory Dashboard' })
+    }
+  }, [])
+
   useEffect(() => {
     initAuth()
     initCategories()
-  }, [initAuth, initCategories])
+    initSettings()
+  }, [initAuth, initCategories, initSettings])
 
   const login = async (username: string, password: string) => {
     const { login: apiLogin } = await import('./lib/api')
@@ -61,8 +74,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }
 
+  const refreshSettings = async () => {
+    try {
+      const res = await fetchSettings()
+      setSettings(res)
+    } catch {}
+  }
+
   return (
-    <AppContext.Provider value={{ user, loading, categories, login, doLogout, refreshCategories }}>
+    <AppContext.Provider value={{ user, loading, categories, settings, login, doLogout, refreshCategories, refreshSettings }}>
       {children}
     </AppContext.Provider>
   )

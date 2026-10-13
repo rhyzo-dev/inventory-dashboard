@@ -426,3 +426,28 @@ export const deleteCategory = async (id: string): Promise<void> => {
     throw new Error(err.error || `Delete category failed: ${res.status}`)
   }
 }
+
+// ── App Settings ───────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  company_name: string
+}
+
+export const fetchSettings = async (): Promise<AppSettings> => {
+  const res = await fetch(`${apiBase}/api/settings`, { ...CRED })
+  if (!res.ok) return { company_name: 'Inventory Dashboard' }
+  return res.json()
+}
+
+export const updateSettings = async (updates: Partial<AppSettings>): Promise<void> => {
+  const res = await fetch(`${apiBase}/api/settings`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Update settings failed: ${res.status}`)
+  }
+}

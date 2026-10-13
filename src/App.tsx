@@ -12,12 +12,13 @@ import { DeleteDialog } from './components/DeleteDialog'
 import { ImageViewer } from './components/ImageViewer'
 import { UploadModal } from './components/UploadModal'
 import { UserManagement, CategoryManagement } from './components/AdminPanels'
+import { SettingsModal } from './components/SettingsModal'
 import {
-  LogOut, Users, Tag, ChevronDown,
+  LogOut, Users, Tag, ChevronDown, SlidersHorizontal,
 } from 'lucide-react'
 
 function AppContent() {
-  const { user, categories, doLogout, refreshCategories } = useApp();
+  const { user, categories, settings, doLogout, refreshCategories, refreshSettings } = useApp();
   const [filters, setFilters] = useState({
     search: '',
     category: '',
@@ -43,6 +44,7 @@ function AppContent() {
   // Admin panels
   const [showUsers, setShowUsers] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -154,7 +156,7 @@ function AppContent() {
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Inventory Dashboard</h1>
-              <p className="text-xs text-gray-500 mt-0.5">Arctech TT Plant</p>
+              <p className="text-xs text-gray-500 mt-0.5">{settings.company_name}</p>
             </div>
 
             {/* Role badge */}
@@ -194,6 +196,17 @@ function AppContent() {
               >
                 <Tag className="w-4 h-4" />
                 <span className="hidden sm:inline">Categories</span>
+              </button>
+            )}
+
+            {isAdmin && (
+              <button
+                onClick={() => setShowSettings(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                title="Site Settings"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span className="hidden sm:inline">Settings</span>
               </button>
             )}
 
@@ -274,7 +287,7 @@ function AppContent() {
       <footer className="bg-white border-t border-gray-200 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500">
-            <span>Arctech TT Plant</span>
+            <span>{settings.company_name}</span>
             <span className="mt-1 sm:mt-0">Developed by rhyzo</span>
           </div>
         </div>
@@ -331,6 +344,16 @@ function AppContent() {
           onCategoryChange={refreshCategories}
           onError={(msg) => showToast(msg, 'error')}
           allowedRoles={['admin', 'editor']}
+        />
+      )}
+
+      {isAdmin && (
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          settings={settings}
+          onSaved={() => { showToast('Settings saved'); refreshSettings() }}
+          onError={(msg) => showToast(msg, 'error')}
         />
       )}
     </div>

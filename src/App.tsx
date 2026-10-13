@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { fetchAllData } from './context'
 import { useApp } from './context'
+import { removeImage } from './lib/api'
 import InventoryTable, { type InventoryItem } from './components/InventoryTable'
 import { StatsCards } from './components/StatsCards'
 import { Filters } from './components/Filters'
@@ -116,6 +117,16 @@ function AppContent() {
 
   const handleUploadImage = (item: InventoryItem) => {
     setUploadItem(item); setIsUploadOpen(true)
+  }
+
+  const handleRemoveImage = async (item: InventoryItem) => {
+    try {
+      await removeImage(item.id)
+      showToast('Image removed')
+      fetchData()
+    } catch (e: any) {
+      showToast(e.message || 'Failed to remove image', 'error')
+    }
   }
 
   const handleImageUploaded = (_url: string) => {
@@ -251,6 +262,7 @@ function AppContent() {
                 onDelete={isAdmin ? handleDelete : undefined}
                 onViewImage={handleViewImage}
                 onUploadImage={isEditor ? handleUploadImage : undefined}
+                onRemoveImage={isEditor ? handleRemoveImage : undefined}
                 onAdd={isEditor ? handleAdd : undefined}
               />
             </div>

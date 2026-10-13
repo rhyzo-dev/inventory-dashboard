@@ -116,7 +116,7 @@ export const onRequestPost: PagesFunction = async (context) => {
       Key: objectKey,
       Body: uint8Array,
       ContentType: file.type,
-      // NOTE: No ACL — Tigris handles access via endpoint URL
+      ACL: 'public-read',
     }))
 
     const imageUrl = `${endpoint}/${bucket}/${objectKey}`

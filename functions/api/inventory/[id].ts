@@ -12,6 +12,7 @@
 
 import type { PagesFunction } from '@cloudflare/workers-types'
 import { hasRole } from '../../lib/auth'
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3'
 
 const SECURITY_HEADERS = {
   'Content-Type': 'application/json',
@@ -81,6 +82,34 @@ async function parseBody(request: Request): Promise<{ body: unknown; error?: Res
   return { body }
 }
 
+/** Delete an object from Tigris/S3 given its full URL */
+async function deleteFromStorage(env: any, imageUrl: string): Promise<void> {
+  if (!imageUrl || !env.TIGRIS_ENDPOINT || !env.TIGRIS_BUCKET || !env.TIGRIS_ACCESS_KEY_ID) return
+  // URL format: https://t3.storage.dev/bucket-name/items/...
+  const parsed = new URL(imageUrl)
+  const pathParts = parsed.pathname.split('/')
+  // Find bucket name in path: /inventory-dashboard/items/...
+  const bucketName = env.TIGRIS_BUCKET
+  const basePath = `/${bucketName}/`
+  const keyStart = parsed.pathname.indexOf(basePath) + basePath.length
+  const key = parsed.pathname.slice(keyStart)
+  if (!key) return
+
+  const s3Client = new S3Client({
+    region: 'auto',
+    endpoint: env.TIGRIS_ENDPOINT,
+    credentials: {
+      accessKeyId: env.TIGRIS_ACCESS_KEY_ID,
+      secretAccessKey: env.TIGRIS_SECRET_ACCESS_KEY || '',
+    },
+    forcePathStyle: true,
+  })
+  await s3Client.send(new DeleteObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+  }))
+}
+
 // ─── PUT: Update item ──────────────────────────────────────────────────────────
 
 export const onRequestPut: PagesFunction = async (context) => {
@@ -105,12 +134,26 @@ export const onRequestPut: PagesFunction = async (context) => {
     const updates: string[] = []
     const values: unknown[] = []
 
-    const stringFields = ['sku', 'name', 'description', 'category', 'bin_location', 'image_url', 'specification']
+    const stringFields = ['sku', 'name', 'description', 'category', 'bin_location', 'specification']
     for (const field of stringFields) {
       if (b[field] !== undefined) {
         updates.push(`${field} = ?`)
         values.push(sanitize(String(b[field])))
       }
+    }
+
+    // Handle image_url specially: if clearing, delete the file from Tigris first
+    if (b.image_url !== undefined) {
+      const newUrl = b.image_url === '' || b.image_url === null ? null : sanitize(String(b.image_url))
+      // If removing an image, look up and delete the old one
+      if (!newUrl) {
+        const oldItem = await env.DB.prepare('SELECT image_url FROM consumable_item WHERE id = ?').bind(id).first<{ image_url: string | null }>()
+        if (oldItem?.image_url) {
+          await deleteFromStorage(env, oldItem.image_url).catch(e => console.error('Image cleanup failed:', e))
+        }
+      }
+      updates.push('image_url = ?')
+      values.push(newUrl)
     }
 
     const numberFields = ['quantity', 'min_threshold', 'max_threshold']

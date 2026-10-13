@@ -251,6 +251,20 @@ export const uploadImage = async (file: File, itemId?: string): Promise<UploadRe
   return res.json()
 }
 
+/** Remove an item's image — clears image_url from DB (backend deletes file from Tigris) */
+export const removeImage = async (id: string): Promise<void> => {
+  const res = await fetch(`${apiBase}/api/inventory/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ image_url: '' }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Remove image failed: ${res.status}`)
+  }
+}
+
 // ── Users (admin only) ─────────────────────────────────────────────────────────
 
 export const fetchUsers = async (): Promise<{ users: User[] }> => {

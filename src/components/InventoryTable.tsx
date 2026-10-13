@@ -36,6 +36,7 @@ interface InventoryTableProps {
   onDelete: (item: InventoryItem) => void;
   onViewImage: (item: InventoryItem) => void;
   onUploadImage: (item: InventoryItem) => void;
+  onRemoveImage: (item: InventoryItem) => void;
   onAdd: () => void;
 }
 
@@ -60,6 +61,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   onDelete,
   onViewImage,
   onUploadImage,
+  onRemoveImage,
   onAdd,
 }) => {
   if (items.length === 0) {
@@ -168,6 +170,15 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                       >
                         View
                       </button>
+                      {onRemoveImage && (
+                        <button
+                          onClick={() => onRemoveImage(item)}
+                          className="text-xs text-red-400 hover:text-red-600 hover:underline"
+                          title="Remove image"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <button

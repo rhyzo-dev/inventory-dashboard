@@ -19,13 +19,15 @@ pages_build_output_dir = "dist"
 [vars]
 # Default facility ID used when no facility context is provided
 FACILITY_ID = "00000000-0000-0000-0000-000000000001"
-# Tigris object storage credentials (S3-compatible API)
-TIGRIS_ACCESS_KEY_ID = "REDACTED"
-TIGRIS_SECRET_ACCESS_KEY = "REDACTED"
+# Tigris object storage — non-secret config only. The credentials and JWT signing
+# secret are managed as Cloudflare Pages SECRETS (never committed to git):
+#   TIGRIS_ACCESS_KEY_ID, TIGRIS_SECRET_ACCESS_KEY, AUTH_SECRET
+# Set/update them with:
+#   npx wrangler pages secret put TIGRIS_ACCESS_KEY_ID --project-name=inventory-dashboard
+#   npx wrangler pages secret put TIGRIS_SECRET_ACCESS_KEY --project-name=inventory-dashboard
+#   npx wrangler pages secret put AUTH_SECRET --project-name=inventory-dashboard
 TIGRIS_BUCKET = "inventory-dashboard"
 TIGRIS_ENDPOINT = "https://t3.storage.dev"
-# JWT signing secret — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-AUTH_SECRET = "REDACTED"
 
 [[d1_databases]]
 binding = "DB"

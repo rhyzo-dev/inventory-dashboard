@@ -38,5 +38,24 @@ export const onRequest: PagesFunction = async (context) => {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
+  // Content-Security-Policy: same-origin only. Allows the built CSS/JS, inline
+  // style attributes used by React, and data:/blob: for client-side image
+  // compression. This is defense-in-depth against XSS — a compromised script
+  // can't exfiltrate to an external host or load remote code.
+  response.headers.set('Content-Security-Policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; '))
+
+  // HSTS: force HTTPS for a year, including subdomains
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+
   return response
 }

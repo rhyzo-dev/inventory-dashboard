@@ -116,12 +116,15 @@ export const onRequestPost: PagesFunction = async (context) => {
       'INSERT OR REPLACE INTO refresh_tokens (token, user_id, expires_at) VALUES (?, ?, ?)'
     ).bind(tokens.refreshToken, user.id, tokens.expiresAt).run()
 
+    const expiresAtMs = new Date(tokens.expiresAt).getTime()
+    const maxAgeSeconds = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000))
+
     // Set httpOnly cookies
     const setCookie = (name: string, value: string, maxAge: number) =>
       `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`
 
     const cookies = [
-      setCookie('auth_token', tokens.accessToken, tokens.expiresAt),
+      setCookie('auth_token', tokens.accessToken, maxAgeSeconds),
       setCookie('refresh_token', tokens.refreshToken, 604800), // 7 days
     ].join(', ')
 

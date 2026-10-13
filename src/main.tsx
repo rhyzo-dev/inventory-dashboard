@@ -1,9 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { AppProvider } from './context'
+import { AppProvider, useApp } from './context'
 import App from './App'
 import { LoginPage } from './pages/Login'
 import './index.css'
+
+// Login page wired to context so onLogin is always available
+function LoginScreen() {
+  const { login } = useApp()
+  return <LoginPage onLogin={login} />
+}
 
 // Root app that decides between login page and main app based on auth state
 function Root() {
@@ -42,7 +48,7 @@ function Root() {
 
   return (
     <AppProvider>
-      {redirectToLogin ? <LoginPage /> : <App />}
+      {redirectToLogin ? <LoginScreen /> : <App />}
     </AppProvider>
   )
 }

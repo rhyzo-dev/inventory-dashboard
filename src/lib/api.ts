@@ -241,6 +241,57 @@ export const deleteItem = async (id: string): Promise<{ message: string }> => {
   return res.json()
 }
 
+// ── Image compression helpers ────────────────────────────────────────────────
+
+const MAX_DIM = 1200
+const JPEG_QUALITY = 0.8
+const SKIP_SIZE = 50 * 1024 // skip compression if already under 50 KB
+
+/** Compress an image via canvas. Returns a WebP blob if the input was larger than SKIP_SIZE;
+ *  otherwise returns the original file unchanged. */
+async function compressImage(file: File): Promise<File> {
+  if (file.size <= SKIP_SIZE) return file
+
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('Failed to load image')) }
+      URL.revokeObjectURL(img.src)
+
+      const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight))
+      const w = Math.round(img.naturalWidth * scale)
+      const h = Math.round(img.naturalHeight * scale)
+
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, w, h)
+
+      // Prefer WebP for smaller output; fall back to JPEG if not supported
+      const preferWebP = typeof HTMLCanvasElement.prototype.toBlob === 'function'
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            // Fallback: try JPEG
+            canvas.toBlob(
+              (jblob) => resolve(jblob ? new File([jblob], file.name, { type: 'image/jpeg' }) : file),
+              'image/jpeg',
+              JPEG_QUALITY
+            )
+            return
+          }
+          resolve(new File([blob], file.name, { type: blob.type }))
+        },
+        'image/webp',
+        JPEG_QUALITY
+      )
+    }
+    img.onerror = () => reject(new Error('Failed to load image'))
+    img.src = URL.createObjectURL(file)
+  })
+}
+
 // ── Upload image ───────────────────────────────────────────────────────────────
 
 export interface UploadResult {
@@ -253,8 +304,9 @@ export interface UploadResult {
 }
 
 export const uploadImage = async (file: File, itemId?: string): Promise<UploadResult> => {
+  const compressed = await compressImage(file)
   const formData = new FormData()
-  formData.append('file', file)
+  formData.append('file', compressed)
   if (itemId) formData.append('itemId', itemId)
 
   const res = await fetch(`${apiBase}/api/upload`, { method: 'POST', credentials: 'include', body: formData })

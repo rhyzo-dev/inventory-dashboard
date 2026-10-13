@@ -117,6 +117,17 @@ export const getCurrentUser = async (): Promise<User | null> => {
   return res.json()
 }
 
+/**
+ * Silently renew the session using the refresh_token cookie.
+ * Returns true if a fresh access token was issued (or the session was already valid).
+ * Call this when a 401 is received — it lets a user keep working past the 8-hour
+ * access-token window without re-logging in, as long as the 7-day refresh cookie is alive.
+ */
+export const refreshAuth = async (): Promise<boolean> => {
+  const res = await fetch(`${apiBase}/api/auth/refresh`, { method: 'POST', credentials: 'include' })
+  return res.ok
+}
+
 // ── Inventory ──────────────────────────────────────────────────────────────────
 
 export const fetchInventory = async (

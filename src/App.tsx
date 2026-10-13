@@ -77,6 +77,22 @@ function AppContent() {
       setData(result)
     } catch (e: any) {
       if (e.message?.includes('401') || e.message?.includes('Authentication')) {
+        // Access token may have lapsed — try to silently renew before forcing logout
+        const { refreshAuth } = await import('./lib/api')
+        const renewed = await refreshAuth()
+        if (renewed) {
+          setLoading(true)
+          try {
+            const result = await fetchAllData(filters.search, filters.category, filters.status, filters.view, filters.page, filters.limit)
+            setData(result)
+            setLoading(false)
+            return
+          } catch (retryErr: any) {
+            setError(retryErr.message || 'Failed to load data')
+            setLoading(false)
+            return
+          }
+        }
         doLogout()
         return
       }

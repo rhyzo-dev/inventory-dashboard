@@ -17,7 +17,7 @@
 const PBKDF2_ITERATIONS = 100_000
 const SALT_BYTES = 16
 const KEY_BYTES = 32       // 256-bit
-const ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000   // 15 minutes
+const ACCESS_TOKEN_TTL_MS = 8 * 60 * 60 * 1000   // 8 hours
 const REFRESH_TOKEN_TTL_MS  = 7 * 24 * 60 * 60 * 1000  // 7 days
 const MAX_FAILED_ATTEMPTS = 5
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000    // 15 minutes

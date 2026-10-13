@@ -22,7 +22,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const initAuth = useCallback(async () => {
     try {
-      const u = await getCurrentUser()
+      let u = await getCurrentUser()
+      // Access token expired but refresh cookie still valid → renew silently
+      if (!u) {
+        const { refreshAuth } = await import('./lib/api')
+        if (await refreshAuth()) u = await getCurrentUser()
+      }
       setUser(u)
     } catch {
       setUser(null)

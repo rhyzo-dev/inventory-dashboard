@@ -33,3 +33,6 @@ npm-debug.log*
 
 # Wrangler
 .wrangler/.env
+
+# Wrangler local state (D1 databases, KV namespaces, etc.)
+.wrangler/state/

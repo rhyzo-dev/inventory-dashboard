@@ -160,7 +160,7 @@ export async function verifyJwt(token: string, secret: string): Promise<JwtPaylo
       'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
     )
     const sigBytes = b64urlDecode(sigB64)
-    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(`${headerB64}._payloadB64`))
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, encoder.encode(`${headerB64}.${_payloadB64}`))
     if (!valid) return null
 
     // Decode payload

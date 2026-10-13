@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import type { PagesFunction } from '@cloudflare/workers-types';
 
 // Helper: treat string "null" as actual null
 const clean = (val: any) => val === 'null' ? null : val;
@@ -12,8 +13,28 @@ const toProxyImageUrl = (url: string | null | undefined): string | null => {
   return url;
 };
 
+// Auth: require a logged-in user (any role) to export data
+async function requireAuth(context: any): Promise<Response | null> {
+  const cookieHeader = context.request.headers.get('cookie') || '';
+  const match = cookieHeader.match(/(?:^|;\s*)auth_token=([^;]*)/);
+  if (!match) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401 });
+  try {
+    const { verifyJwt } = await import('../lib/auth');
+    const payload = await verifyJwt(match[1], context.env.AUTH_SECRET || '');
+    if (!payload) return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401 });
+    const user = await context.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(payload.sub).first<any>();
+    if (!user) return new Response(JSON.stringify({ error: 'User not found' }), { status: 401 });
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401 });
+  }
+  return null;
+}
+
 export const onRequestGet: PagesFunction = async (context) => {
   try {
+    const authError = await requireAuth(context);
+    if (authError) return authError;
+
     const url = new URL(context.request.url);
     const search = url.searchParams.get('search') ?? '';
     const category = url.searchParams.get('category') ?? '';
@@ -136,8 +157,15 @@ export const onRequestGet: PagesFunction = async (context) => {
     }
 
     if (format === 'xlsx') {
+      // Fetch company name from settings for workbook metadata
+      let companyName = 'Inventory Dashboard';
+      try {
+        const settingsRows = await context.env.DB.prepare('SELECT value FROM app_settings WHERE key = ?').bind('company_name').first<any>();
+        if (settingsRows?.value) companyName = settingsRows.value;
+      } catch {}
+
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'Arctech TT Plant Inventory Dashboard';
+      workbook.creator = `${companyName} Inventory Export`;
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet('Inventory Export');

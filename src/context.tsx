@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, fetchSettings, type AppSettings } from './lib/api'
+import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, toProxyImageUrl, fetchSettings, type AppSettings } from './lib/api'
 
 interface AppState {
   user: User | null

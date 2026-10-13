@@ -1,11 +1,11 @@
 import React from 'react';
-import { Package, AlertTriangle, AlertCircle, Calendar, DollarSign } from 'lucide-react';
+import { Package, AlertTriangle, AlertCircle, Calendar } from 'lucide-react';
 
 interface StatsCardProps {
   title: string;
   value: number | string;
   Icon: React.ComponentType<{ className?: string }>;
-  color?: 'blue' | 'red' | 'yellow' | 'green' | 'gray';
+  color?: 'blue' | 'red' | 'yellow' | 'green';
 }
 
 const StatsCard: React.FC<StatsCardProps> = ({ title, value, Icon, color = 'blue' }) => {
@@ -14,15 +14,14 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, Icon, color = 'blue
     red: 'border-red-500 bg-red-50 text-red-600',
     yellow: 'border-yellow-500 bg-yellow-50 text-yellow-600',
     green: 'border-green-500 bg-green-50 text-green-600',
-    gray: 'border-gray-300 bg-gray-50 text-gray-600'
   };
 
-  const bgColor = colorMap[color] || colorMap.gray;
+  const bgColor = colorMap[color] || colorMap.blue;
 
   return (
     <div className={`rounded-lg border p-4 flex items-center space-x-4 ${bgColor}`}>
       <div className="w-10 h-10 flex items-center justify-center">
-        <Icon className={`w-5 h-5 ${color === 'gray' ? 'text-gray-500' : `text-${color}-600`}`} />
+        <Icon className={`w-5 h-5 text-${color}-600`} />
       </div>
       <div>
         <p className="text-sm font-medium text-gray-500">{title}</p>
@@ -38,7 +37,6 @@ interface StatsCardsProps {
     low_stock_count: number;
     out_of_stock_count: number;
     expiring_soon_count: number;
-    total_value_estimate: number;
   };
 }
 
@@ -68,13 +66,6 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ stats }) => {
         value={stats.expiring_soon_count}
         Icon={Calendar}
         color="green"
-      />
-      {/* Optional: Total Value */}
-      <StatsCard
-        title="Est. Value"
-        value={`$${stats.total_value_estimate.toLocaleString()}`}
-        Icon={DollarSign}
-        color="gray"
       />
     </div>
   );

@@ -1,5 +1,8 @@
 import ExcelJS from 'exceljs';
 
+// Helper: treat string "null" as actual null
+const clean = (val: any) => val === 'null' ? null : val;
+
 export const onRequestGet: PagesFunction = async (context) => {
   try {
     const url = new URL(context.request.url);
@@ -7,9 +10,8 @@ export const onRequestGet: PagesFunction = async (context) => {
     const category = url.searchParams.get('category') ?? '';
     const status = url.searchParams.get('status') ?? '';
     const view = url.searchParams.get('view') ?? '';
-    const format = url.searchParams.get('format') ?? 'csv'; // csv or xlsx
+    const format = url.searchParams.get('format') ?? 'csv';
 
-    // Build WHERE clause (same as inventory API)
     let whereSql = '1=1';
     const params: any[] = [];
 
@@ -43,18 +45,13 @@ export const onRequestGet: PagesFunction = async (context) => {
       whereSql += ' AND quantity >= min_threshold';
     }
 
-    // Fetch all matching items (no pagination for export)
     const dataResult = await context.env.DB.prepare(
       `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku`
     ).bind(...params).all();
 
-    // Helper: treat string "null" as actual null
-    const clean = (val: any) => val === 'null' ? null : val;
-
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
-    // Transform rows
     const rows = dataResult.results.map((row: any) => ({
       id: row.id,
       facility_id: row.facility_id,
@@ -73,10 +70,9 @@ export const onRequestGet: PagesFunction = async (context) => {
       updater_id: row.updater_id,
       created_at: clean(row.created_at),
       updated_at: clean(row.updated_at),
-      specification: row.specification ?? null // NEW: specification column
+      specification: clean(row.specification)
     }));
 
-    // Generate CSV
     if (format === 'csv') {
       const headers = [
         'SKU', 'Name', 'Specification', 'Category',
@@ -130,7 +126,6 @@ export const onRequestGet: PagesFunction = async (context) => {
       });
     }
 
-    // Generate Excel (.xlsx) using exceljs
     if (format === 'xlsx') {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'Arctech TT Plant Inventory Dashboard';
@@ -138,7 +133,6 @@ export const onRequestGet: PagesFunction = async (context) => {
 
       const worksheet = workbook.addWorksheet('Inventory Export');
 
-      // Define columns per user requirements: Item Code, Item Name, Specification, Location, Manufacturing Date, Expiration Date, Current Quantity
       worksheet.columns = [
         { header: 'Item Code (SKU)', key: 'sku', width: 18 },
         { header: 'Item Name', key: 'name', width: 30 },
@@ -149,17 +143,14 @@ export const onRequestGet: PagesFunction = async (context) => {
         { header: 'Current Quantity', key: 'quantity', width: 16 }
       ];
 
-      // Style header row
-      worksheet.getRow(1).font = { bold: true, size: 11 };
+      worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
       worksheet.getRow(1).fill = {
         type: 'pattern',
         pattern: 'solid',
         fgColor: { argb: 'FF2563EB' }
       };
-      worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
       worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-      // Add data rows
       rows.forEach((row: any) => {
         const productionDate = row.production_date ? new Date(row.production_date).toISOString().split('T')[0] : '';
         const expiryDate = row.expiry_date ? new Date(row.expiry_date).toISOString().split('T')[0] : '';
@@ -175,14 +166,11 @@ export const onRequestGet: PagesFunction = async (context) => {
         });
       });
 
-      // Style data rows - alternate colors + status-based formatting
       worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header
-
+        if (rowNumber === 1) return;
         row.alignment = { vertical: 'middle' };
         row.height = 20;
 
-        // Alternate row colors
         if (rowNumber % 2 === 0) {
           row.fill = {
             type: 'pattern',
@@ -191,7 +179,6 @@ export const onRequestGet: PagesFunction = async (context) => {
           };
         }
 
-        // Highlight low/out of stock in quantity column (column G = 7)
         const qty = row.getCell(7).value as number;
         const minThreshold = rows[rowNumber - 2]?.min_threshold ?? 0;
         if (qty <= 0) {
@@ -203,16 +190,13 @@ export const onRequestGet: PagesFunction = async (context) => {
         }
       });
 
-      // Auto-filter
       worksheet.autoFilter = {
         from: { row: 1, column: 1 },
         to: { row: 1, column: 7 }
       };
 
-      // Freeze header row
       worksheet.views = [{ state: 'frozen', ySplit: 1 }];
 
-      // Generate buffer
       const buffer = await workbook.xlsx.writeBuffer();
       const filename = `inventory_export_${dateStr}.xlsx`;
 
@@ -224,7 +208,6 @@ export const onRequestGet: PagesFunction = async (context) => {
       });
     }
 
-    // Unknown format
     return new Response('Unsupported format. Use format=csv or format=xlsx', {
       status: 400,
       headers: { 'Content-Type': 'text/plain' }

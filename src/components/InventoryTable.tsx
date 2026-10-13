@@ -1,8 +1,9 @@
 import React from 'react';
-import { Package, AlertTriangle, AlertCircle, Calendar, Image, Trash2, Edit3, ExternalLink } from 'lucide-react';
+import { Package, AlertTriangle, AlertCircle, Calendar, Image, Trash2, Edit3, ExternalLink, Plus } from 'lucide-react';
 
-interface InventoryItem {
+export interface InventoryItem {
   id: string;
+  facility_id: string | null;
   sku: string;
   name: string;
   description: string | null;
@@ -11,11 +12,14 @@ interface InventoryItem {
   min_threshold: number;
   max_threshold: number;
   bin_location: string | null;
-  production_date: string | null; // YYYY-MM-DD
-  expiry_date: string | null; // YYYY-MM-DD
+  production_date: string | null;
+  expiry_date: string | null;
   image_url: string | null;
-  created_at: string; // ISO timestamp
-  updated_at: string; // ISO timestamp
+  creator_id: string | null;
+  updater_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  specification: string | null;
 }
 
 interface InventoryTableProps {
@@ -28,6 +32,11 @@ interface InventoryTableProps {
   };
   onPageChange: (page: number) => void;
   onLimitChange: (limit: number) => void;
+  onEdit: (item: InventoryItem) => void;
+  onDelete: (item: InventoryItem) => void;
+  onViewImage: (item: InventoryItem) => void;
+  onUploadImage: (item: InventoryItem) => void;
+  onAdd: () => void;
 }
 
 const getStatus = (quantity: number, minThreshold: number): { label: string; color: 'green' | 'yellow' | 'red' } => {
@@ -42,38 +51,54 @@ const formatDate = (dateStr: string | null): string => {
   return d.toLocaleDateString();
 };
 
-const InventoryTable: React.FC<InventoryTableProps> = ({ items, pagination, onPageChange, onLimitChange }) => {
-  const handlePageChange = (page: number) => {
-    onPageChange(page);
-  };
-
-  const handleLimitChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    onLimitChange(parseInt(e.target.value));
-  };
-
+const InventoryTable: React.FC<InventoryTableProps> = ({
+  items,
+  pagination,
+  onPageChange,
+  onLimitChange,
+  onEdit,
+  onDelete,
+  onViewImage,
+  onUploadImage,
+  onAdd,
+}) => {
   if (items.length === 0) {
     return (
       <div className="py-12 text-center text-gray-500">
-        No items found
+        <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+        <p className="text-lg font-medium">No items found</p>
+        <p className="text-sm mt-1">Click "Add Item" to create your first item.</p>
       </div>
     );
   }
 
   return (
     <div className="overflow-x-auto">
+      {/* Add item bar */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">
+          Showing {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} items
+        </p>
+        <button
+          onClick={onAdd}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          Add Item
+        </button>
+      </div>
+
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bin</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Updated</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
+            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
@@ -84,48 +109,90 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, pagination, onPa
               : null;
 
             return (
-              <tr key={item.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.sku}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.quantity}</td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${status.color === 'green' ? 'bg-green-100 text-green-800' : status.color === 'yellow' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+              <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className="font-mono text-sm text-gray-900">{item.sku}</span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                  {item.specification && (
+                    <div className="text-xs text-gray-400 truncate max-w-[180px]" title={item.specification}>
+                      {item.specification}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                  {item.category || '—'}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
+                  {item.quantity}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    status.color === 'green' ? 'bg-green-100 text-green-800'
+                    : status.color === 'yellow' ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-red-100 text-red-800'
+                  }`}>
                     {status.label}
                   </span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.bin_location || '-'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                   {item.expiry_date ? (
-                    <>
-                      {formatDate(item.expiry_date)} <br />
-                      <span className={daysToExpiry !== null && daysToExpiry < 0 ? 'text-red-600 text-xs' : daysToExpiry !== null && daysToExpiry <= 7 ? 'text-yellow-600 text-xs' : 'text-green-600 text-xs'}>
-                        {daysToExpiry !== null ? (daysToExpiry > 0 ? `+${daysToExpiry}d` : `${daysToExpiry}d`) : ''}
-                      </span>
-                    </>
-                  ) : '-'}
+                    <div>
+                      <div>{formatDate(item.expiry_date)}</div>
+                      {daysToExpiry !== null && (
+                        <span className={`text-xs ${
+                          daysToExpiry < 0 ? 'text-red-500'
+                          : daysToExpiry <= 7 ? 'text-yellow-600'
+                          : 'text-green-600'
+                        }`}>
+                          {daysToExpiry > 0 ? `+${daysToExpiry}d` : `${daysToExpiry}d`}
+                        </span>
+                      )}
+                    </div>
+                  ) : '—'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                <td className="px-4 py-3 whitespace-nowrap">
                   {item.image_url ? (
-                    <a href={item.image_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
-                      View
-                    </a>
-                  ) : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {new Date(item.updated_at).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <div className="flex space-x-2">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-8 h-8 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => onViewImage(item)}
+                        title="Click to view full size"
+                      />
+                      <button
+                        onClick={() => onViewImage(item)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        View
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      onClick={() => console.log('Edit item:', item.id)}
-                      className="text-sm text-blue-600 hover:text-blue-900"
+                      onClick={() => onUploadImage(item)}
+                      className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
+                      title="Upload an image for this item"
+                    >
+                      <Image className="w-3.5 h-3.5" />
+                      Upload
+                    </button>
+                  )}
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => onEdit(item)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                      title="Edit item"
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => console.log('Delete item:', item.id)}
-                      className="text-sm text-red-600 hover:text-red-900"
+                      onClick={() => onDelete(item)}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      title="Delete item"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -137,32 +204,36 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, pagination, onPa
         </tbody>
       </table>
 
-      <div className="py-4 px-4 sm:px-6 flex items-center justify-between text-sm text-gray-500">
-        <div>
-          Showing {(pagination.page - 1) * pagination.limit + 1}-{Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} items
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
-            disabled={pagination.page === 1}
-            className={`px-3 py-1 rounded border-gray-300 bg-white hover:bg-gray-50 ${pagination.page === 1 ? 'opacity-50' : ''}`}
-          >
-            Previous
-          </button>
+      {/* Pagination */}
+      <div className="py-4 px-4 flex items-center justify-between text-sm text-gray-500 border-t border-gray-200">
+        <div className="flex items-center gap-2">
+          <span>Per page:</span>
           <select
             value={pagination.limit}
-            onChange={handleLimitChange}
-            className="border border-gray-300 rounded px-2 py-1 bg-white"
+            onChange={(e) => onLimitChange(parseInt(e.target.value))}
+            className="border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value={10}>10</option>
             <option value={25}>25</option>
             <option value={50}>50</option>
             <option value={100}>100</option>
           </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onPageChange(Math.max(1, pagination.page - 1))}
+            disabled={pagination.page === 1}
+            className="px-3 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Previous
+          </button>
+          <span className="px-2">
+            Page {pagination.page} of {pagination.pages}
+          </span>
           <button
             onClick={() => onPageChange(Math.min(pagination.pages, pagination.page + 1))}
             disabled={pagination.page === pagination.pages}
-            className={`px-3 py-1 rounded border-gray-300 bg-white hover:bg-gray-50 ${pagination.page === pagination.pages ? 'opacity-50' : ''}`}
+            className="px-3 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>

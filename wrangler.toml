@@ -1,15 +1,31 @@
+# Inventory Dashboard — Cloudflare Pages Project
+# Stack: React 18 + Vite + Tailwind CSS v3 + Cloudflare D1 + Tigris (S3-compatible storage)
+#
+# IMPORTANT: Use Tailwind v3, NOT v4. v4's @tailwindcss/postcss plugin is ESM-only
+# and silently fails to scan source files when loaded via CJS, producing a CSS file
+# with only basic layout classes and missing all colors/spacing/shadows.
+#
+# Build flow:
+#   npm run build          → Vite builds React app; PostCSS scans src/ for Tailwind classes
+#   npx wrangler pages deploy dist  → Uploads dist/ (Vite output) + functions/ (Pages Functions)
+#
+# DO NOT put a [build] section in wrangler.toml — it conflicts with Pages deploy and causes:
+#   "Configuration file for Pages projects does not support 'build'"
+
 name = "inventory-dashboard"
 compatibility_date = "2024-01-01"
 pages_build_output_dir = "dist"
 
-[build]
-command = "npm run build && npx wrangler pages functions build functions --outdir dist/functions"
-
 [vars]
+# Default facility ID used when no facility context is provided
+FACILITY_ID = "00000000-0000-0000-0000-000000000001"
+# Tigris object storage credentials (S3-compatible API)
 TIGRIS_ACCESS_KEY_ID = "REDACTED"
 TIGRIS_SECRET_ACCESS_KEY = "REDACTED"
 TIGRIS_BUCKET = "inventory-dashboard"
 TIGRIS_ENDPOINT = "https://t3.storage.dev"
+# JWT signing secret — generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+AUTH_SECRET = "REDACTED"
 
 [[d1_databases]]
 binding = "DB"

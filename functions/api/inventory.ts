@@ -1,116 +1,207 @@
-// Types matching our Turso schema
-type ConsumableItem = Record<string, any>;
+/**
+ * Inventory Dashboard API — Cloudflare Pages Functions
+ *
+ * Architecture:
+ *   - All data stored in Cloudflare D1 (SQLite). Table uses UUID primary keys.
+ *   - Images stored in Tigris (S3-compatible object storage) via @aws-sdk/client-s3.
+ *   - Rate limiting applied per-IP: 30 req/min for inventory, 10 req/min for uploads.
+ *   - Security headers added by functions/_middleware.ts (CSP, X-Frame-Options, etc.).
+ *
+ * Route structure:
+ *   GET     /api/inventory       — list items (requires any authenticated user)
+ *   POST    /api/inventory       — create item (admin + editor only)
+ *   PUT     /api/inventory/[id]  — update item (admin + editor only)
+ *   DELETE  /api/inventory/[id]  — delete item (admin only)
+ *   POST    /api/upload          — upload image (admin + editor only)
+ *
+ * IMPORTANT: D1 does NOT support auto-increment for integer PKs with UUID tables.
+ *   We generate UUIDs client-side in the Worker using crypto.randomUUID() and
+ *   include them directly in INSERT statements. RowID is not available for these tables.
+ */
+
+import type { PagesFunction } from '@cloudflare/workers-types'
+import { hasRole } from '../lib/auth'
+
+const CONTENT_TYPE_JSON = { 'Content-Type': 'application/json' }
+const SECURITY_HEADERS = {
+  'Content-Type': 'application/json',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Extract user from auth cookie, return null if not authenticated */
+async function getUser(context: any): Promise<any | null> {
+  const cookieHeader = context.request.headers.get('cookie') || ''
+  const match = cookieHeader.match(/(?:^|;\s*)auth_token=([^;]*)/)
+  if (!match) return null
+  const { verifyJwt } = await import('../lib/auth')
+  const payload = await verifyJwt(match[1], context.env.AUTH_SECRET || '')
+  if (!payload) return null
+  return context.env.DB.prepare('SELECT id, username, role FROM users WHERE id = ?').bind(payload.sub).first<any>()
+}
+
+/** Require any authenticated user. Returns user or a 401 Response. */
+async function requireAuth(context: any): Promise<any | Response> {
+  const user = await getUser(context)
+  if (!user) return new Response(JSON.stringify({ error: 'Authentication required' }), { status: 401, headers: SECURITY_HEADERS })
+  return user
+}
+
+/** Require admin or editor. Returns user or a 403 Response. */
+async function requireWriteAccess(context: any): Promise<any | Response> {
+  const user = await requireAuth(context)
+  if (user instanceof Response) return user
+  if (!hasRole(user.role as any, 'editor')) {
+    return new Response(JSON.stringify({ error: 'Permission denied — editors and admins only' }), { status: 403, headers: SECURITY_HEADERS })
+  }
+  return user
+}
+
+/** Require admin. Returns user or a 403 Response. */
+async function requireAdmin(context: any): Promise<any | Response> {
+  const user = await requireAuth(context)
+  if (user instanceof Response) return user
+  if (user.role !== 'admin') {
+    return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers: SECURITY_HEADERS })
+  }
+  return user
+}
+
+/** Sanitize string input: trim whitespace, escape HTML to prevent XSS */
+function sanitize(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/** Parse JSON body, return { body } or a 400 Response */
+async function parseBody(request: Request): Promise<{ body: unknown; error?: Response }> {
+  let body
+  try {
+    body = await request.json()
+  } catch {
+    return { error: new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: SECURITY_HEADERS }) }
+  }
+  return { body }
+}
+
+/** Check rate limit per IP. Returns true if within limit, false if exceeded. */
+function checkRateLimit(env: any, ip: string, limit: number): boolean {
+  const key = `rate:${ip}`
+  const count = env.RATE_LIMIT ? parseInt(env.RATE_LIMIT.get(key) || '0') : 0
+  if (count >= limit) return false
+  if (env.RATE_LIMIT) env.RATE_LIMIT.put(key, String(count + 1), { expirationTtl: 60 }).catch(() => {})
+  return true
+}
+
+// ─── GET: List all items ───────────────────────────────────────────────────────
 
 export const onRequestGet: PagesFunction = async (context) => {
+  const user = await requireAuth(context)
+  if (user instanceof Response) return user
+
   try {
-    const url = new URL(context.request.url);
-    const search = url.searchParams.get('search') ?? '';
-    const category = url.searchParams.get('category') ?? '';
-    const status = url.searchParams.get('status') ?? ''; // adequate | low_stock | out_of_stock
-    const view = url.searchParams.get('view') ?? ''; // low-stock | expiring
-    const page = Math.max(parseInt(url.searchParams.get('page') ?? '1'), 1);
-    const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '25'), 100); // cap at 100
+    const { env, request } = context
+    const url = new URL(request.url)
+    const category = url.searchParams.get('category')
+    const search = url.searchParams.get('search')
 
-    // Build WHERE clause
-    let whereSql = '1=1';
-    const params: any[] = [];
-
-    if (context.env.FACILITY_ID) {
-      whereSql += ' AND facility_id = ?';
-      params.push(context.env.FACILITY_ID);
-    }
-
-    if (search) {
-      whereSql += ' AND (sku LIKE ? OR name LIKE ? OR bin_location LIKE ? OR category LIKE ?)';
-      const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-    }
+    let query = 'SELECT * FROM consumable_item WHERE 1=1'
+    const params: unknown[] = []
 
     if (category) {
-      whereSql += ' AND category = ?';
-      params.push(category);
+      query += ' AND category = ?'
+      params.push(sanitize(category))
+    }
+    if (search) {
+      query += ' AND (name LIKE ? OR sku LIKE ? OR description LIKE ?)'
+      const like = `%${search}%`
+      params.push(like, like, like)
     }
 
-    if (view === 'low-stock') {
-      whereSql += ' AND quantity < min_threshold';
-    } else if (view === 'expiring') {
-      whereSql += ' AND expiry_date IS NOT NULL AND expiry_date <= date(\'now\', \'+30 days\')';
-    }
+    query += ' ORDER BY updated_at DESC'
 
-    if (status === 'low_stock') {
-      whereSql += ' AND quantity > 0 AND quantity < min_threshold';
-    } else if (status === 'out_of_stock') {
-      whereSql += ' AND quantity <= 0';
-    } else if (status === 'adequate') {
-      whereSql += ' AND quantity >= min_threshold';
-    }
+    const stmt = env.DB.prepare(query).bind(...params)
+    const result = await stmt.all()
+    const items = result.results as Array<Record<string, unknown>>
 
-    // Count total
-    const countResult = await context.env.DB.prepare(
-      `SELECT COUNT(*) FROM consumable_item WHERE ${whereSql}`
-    ).bind(...params).all();
-    const total = Number(countResult.results[0]['COUNT(*)']);
-
-    // Fetch paginated data
-    const offset = (page - 1) * limit;
-    const dataResult = await context.env.DB.prepare(
-      `SELECT * FROM consumable_item WHERE ${whereSql} ORDER BY sku LIMIT ? OFFSET ?`
-    ).bind(...params, limit, offset).all();
-
-    // Transform to frontend-friendly format
-    const items = dataResult.results.map((row: ConsumableItem) => ({
-      id: row.id,
-      facility_id: row.facility_id,
-      sku: row.sku,
-      name: row.name,
-      description: row.description,
-      category: row.category,
-      quantity: Number(row.quantity),
-      min_threshold: Number(row.min_threshold),
-      max_threshold: Number(row.max_threshold),
-      bin_location: row.bin_location,
-      production_date: row.production_date,
-      expiry_date: row.expiry_date,
-      image_url: row.image_url,
-      creator_id: row.creator_id,
-      updater_id: row.updater_id,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }));
-
-    // Calculate stats for summary cards
-    const lowStock = items.filter((i: ConsumableItem) => i.quantity > 0 && i.quantity < i.min_threshold).length;
-    const outOfStock = items.filter((i: ConsumableItem) => i.quantity <= 0).length;
-    const expiringSoon = items.filter((i: ConsumableItem) =>
-      i.expiry_date &&
-      new Date(i.expiry_date) <= new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-    ).length;
-
-    const stats = {
-      total_items: items.length,
-      low_stock_count: lowStock,
-      out_of_stock_count: outOfStock,
-      expiring_soon_count: expiringSoon,
-      total_value_estimate: 0 // placeholder - would need unit price field
-    };
-
-    return new Response(JSON.stringify({
-      items,
-      stats,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return new Response(JSON.stringify({ items }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS }
+    })
   } catch (error) {
-    console.error('Inventory API error:', error);
+    console.error('Inventory GET error:', error)
     return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+      headers: SECURITY_HEADERS
+    })
   }
-};
+}
+
+// ─── POST: Create new item ─────────────────────────────────────────────────────
+
+export const onRequestPost: PagesFunction = async (context) => {
+  const user = await requireWriteAccess(context)
+  if (user instanceof Response) return user
+
+  try {
+    const { env, request } = context
+    const ip = request.headers.get('cf-connecting-ip') || 'unknown'
+
+    if (!checkRateLimit(env, ip, 30)) {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), { status: 429, headers: SECURITY_HEADERS })
+    }
+
+    const { body, error } = await parseBody(request)
+    if (error) return error
+
+    const b = body as Record<string, unknown>
+
+    // Validate required fields
+    if (!b.sku || !b.name) {
+      return new Response(JSON.stringify({ error: 'SKU and name are required' }), { status: 400, headers: SECURITY_HEADERS })
+    }
+
+    // Generate UUID for this new item — D1 UUID tables have no auto-increment
+    const newItemId = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    await env.DB.prepare(`
+      INSERT INTO consumable_item
+        (id, sku, name, description, category, quantity, min_threshold, max_threshold,
+         bin_location, production_date, expiry_date, image_url, creator_id, updater_id,
+         created_at, updated_at, specification, facility_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      newItemId,
+      sanitize(String(b.sku)),
+      sanitize(String(b.name)),
+      sanitize(String(b.description || '')),
+      sanitize(String(b.category || '')),
+      Number(b.quantity) || 0,
+      Number(b.min_threshold) || 0,
+      Number(b.max_threshold) || 0,
+      sanitize(String(b.bin_location || '')),
+      b.production_date ? String(b.production_date) : null,
+      b.expiry_date ? String(b.expiry_date) : null,
+      sanitize(String(b.image_url || '')),
+      user.id,
+      user.id,
+      now,
+      now,
+      sanitize(String(b.specification || '')),
+      env.FACILITY_ID || null
+    ).run()
+
+    return new Response(JSON.stringify({
+      id: newItemId,
+      sku: sanitize(String(b.sku)),
+      name: sanitize(String(b.name)),
+      message: 'Item created successfully'
+    }), { status: 201, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } })
+  } catch (error) {
+    console.error('Inventory POST error:', error)
+    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: SECURITY_HEADERS })
+  }
+}

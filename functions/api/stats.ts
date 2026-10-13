@@ -1,3 +1,6 @@
+// Helper: treat string "null" as actual null
+const clean = (val: any) => val === 'null' ? null : val;
+
 export const onRequestGet: PagesFunction = async (context) => {
   try {
     let whereSql = '1=1';
@@ -32,15 +35,11 @@ export const onRequestGet: PagesFunction = async (context) => {
     ).bind(...params).all();
     const expiring_soon_count = Number(expiringResult.results[0]['COUNT(*)']);
 
-    // Total value estimate (placeholder)
-    const total_value_estimate = 0;
-
     return new Response(JSON.stringify({
       total_items,
       low_stock_count,
       out_of_stock_count,
       expiring_soon_count,
-      total_value_estimate
     }), {
       headers: { 'Content-Type': 'application/json' }
     });

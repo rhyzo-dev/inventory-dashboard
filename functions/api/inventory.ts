@@ -106,6 +106,8 @@ export const onRequestGet: PagesFunction = async (context) => {
     const url = new URL(request.url)
     const category = url.searchParams.get('category')
     const search = url.searchParams.get('search')
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'))
+    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '25')))
 
     let query = 'SELECT * FROM consumable_item WHERE 1=1'
     const params: unknown[] = []
@@ -120,13 +122,28 @@ export const onRequestGet: PagesFunction = async (context) => {
       params.push(like, like, like)
     }
 
-    query += ' ORDER BY updated_at DESC'
+    // Count total matching rows for pagination
+    let countSql = `SELECT COUNT(*) as cnt FROM consumable_item WHERE 1=1`
+    const countParams: unknown[] = []
+    if (category) { countSql += ' AND category = ?'; countParams.push(sanitize(category)) }
+    if (search) {
+      countSql += ' AND (name LIKE ? OR sku LIKE ? OR description LIKE ?)'
+      const like = `%${search}%`
+      countParams.push(like, like, like)
+    }
+    const countResult = await env.DB.prepare(countSql).bind(...countParams).first<{ cnt: number }>()
+    const total = countResult?.cnt ?? 0
+    const totalPages = Math.max(1, Math.ceil(total / limit))
 
-    const stmt = env.DB.prepare(query).bind(...params)
+    query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
+    const stmt = env.DB.prepare(query).bind(...params, limit, (page - 1) * limit)
     const result = await stmt.all()
     const items = result.results as Array<Record<string, unknown>>
 
-    return new Response(JSON.stringify({ items }), {
+    return new Response(JSON.stringify({
+      items,
+      pagination: { page, limit, total, pages: totalPages },
+    }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS }
     })

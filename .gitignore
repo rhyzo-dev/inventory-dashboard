@@ -31,8 +31,6 @@ npm-debug.log*
 *.db
 *.sqlite
 
-# Wrangler
-.wrangler/.env
-
-# Wrangler local state (D1 databases, KV namespaces, etc.)
-.wrangler/state/
+# Wrangler local dev state (local D1 databases, KV namespaces, .env)
+.wrangler/
+wrangler-state/

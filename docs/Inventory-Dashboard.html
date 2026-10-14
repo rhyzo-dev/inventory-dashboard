@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventory Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f4f7fa; --surface:#ffffff; --surface-2:#eef2f7;
+  --ink:#1c2530; --ink-soft:#43505c; --muted:#6a7683; --faint:#9aa6b2;
+  --line:#dbe2ea; --line-soft:#e8edf3;
+  --accent:#1f5fd0; --accent-soft:#e8f0fc; --accent-ink:#0f3f8c;
+  --code-bg:#0f1723; --code-ink:#d7e1ee; --code-key:#8fb4e8;
+  --ok:#1f7a4d; --ok-bg:#e5f4ec; --warn:#9a5a00; --warn-bg:#fff4e0; --crit:#b23317; --crit-bg:#fbe7e1;
+  --good:#1f7a4d; --low:#9a5a00; --oos:#b23317;
+  --shadow:0 1px 2px rgba(20,30,45,.05),0 6px 20px rgba(20,30,45,.06);
+}
+:root{ color-scheme: light; }
+@media (prefers-color-scheme: dark){
+:root:not([data-theme="light"]){
+  --bg:#0d131b; --surface:#131b25; --surface-2:#182231;
+  --ink:#e7edf4; --ink-soft:#c2cdd9; --muted:#8794a3; --faint:#5f6c7b;
+  --line:#263447; --line-soft:#1c2736;
+  --accent:#5f97f0; --accent-soft:#152744; --accent-ink:#a9c8f5;
+  --code-bg:#0a1017; --code-ink:#cdd8e6; --code-key:#8fb4e8;
+  --ok:#48c088; --ok-bg:#10312341; --warn:#e0a53a; --warn-bg:#3a2c0f44; --crit:#ef7a5c; --crit-bg:#3a171141;
+  --good:#48c088; --low:#e0a53a; --oos:#ef7a5c;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+}}
+:root[data-theme="dark"]{
+  --bg:#0d131b; --surface:#131b25; --surface-2:#182231;
+  --ink:#e7edf4; --ink-soft:#c2cdd9; --muted:#8794a3; --faint:#5f6c7b;
+  --line:#263447; --line-soft:#1c2736;
+  --accent:#5f97f0; --accent-soft:#152744; --accent-ink:#a9c8f5;
+  --code-bg:#0a1017; --code-ink:#cdd8e6; --code-key:#8fb4e8;
+  --ok:#48c088; --ok-bg:#10312341; --warn:#e0a53a; --warn-bg:#3a2c0f44; --crit:#ef7a5c; --crit-bg:#3a171141;
+  --good:#48c088; --low:#e0a53a; --oos:#ef7a5c;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:"Archivo","IBM Plex Sans",sans-serif;letter-spacing:-.01em;line-height:1.2;margin:0}
+h2{text-wrap:balance}
+code,pre,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:var(--accent-ink);text-underline-offset:2px}
+
+/* language visibility */
+body.lang-en .zh{display:none}
+body.lang-zh .en{display:none}
+
+/* top bar */
+.topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--surface) 88%,transparent);
+  backdrop-filter:saturate(140%) blur(8px);border-bottom:1px solid var(--line)}
+.topbar .inner{max-width:1180px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand .mark{width:34px;height:34px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex:0 0 auto;box-shadow:var(--shadow)}
+.brand .mark svg{width:19px;height:19px}
+.brand h1{font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap}
+.brand .sub{font-size:12px;color:var(--muted);font-weight:500;margin-top:1px}
+.spacer{flex:1}
+.ctrls{display:flex;align-items:center;gap:8px}
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;font:inherit;font-size:13px;font-weight:600;color:var(--muted);
+  padding:5px 12px;border-radius:6px;cursor:pointer;line-height:1}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:600;
+  padding:7px 13px;border-radius:9px;cursor:pointer;display:inline-flex;gap:7px;align-items:center}
+.btn:hover{border-color:var(--accent);color:var(--accent-ink)}
+.btn svg{width:15px;height:15px}
+
+/* layout */
+.layout{max-width:1180px;margin:0 auto;padding:28px 20px 80px;display:grid;grid-template-columns:1fr;gap:34px}
+@media(min-width:1000px){
+  .layout{grid-template-columns:230px minmax(0,1fr);align-items:start}
+  .toc{position:sticky;top:74px}
+}
+.toc{display:none}
+@media(min-width:1000px){.toc{display:block}}
+.toc .lab{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+.toc a{display:block;text-decoration:none;color:var(--muted);font-size:13px;padding:5px 8px;border-radius:6px;border-left:2px solid transparent;margin-bottom:1px}
+.toc a:hover{background:var(--surface-2);color:var(--ink);border-left-color:var(--accent)}
+.content{min-width:0}
+
+/* doc meta */
+.docmeta{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px;margin-bottom:26px}
+.docmeta .t{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.docmeta .d{color:var(--muted);font-size:14px;margin-top:2px}
+.meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-soft)}
+.meta-grid div .k{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.meta-grid div .v{font-size:14px;font-weight:600;color:var(--ink);margin-top:2px}
+
+.callout{border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.55;display:flex;gap:11px;align-items:flex-start;margin:0 0 4px}
+.callout .ic{flex:0 0 auto;margin-top:1px}
+.callout.amber{background:var(--warn-bg);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent)}
+.callout.amber strong{color:color-mix(in srgb,var(--warn) 80%,var(--ink))}
+.callout.amber .ic{color:var(--warn)}
+
+/* sections */
+section{scroll-margin-top:74px;margin-top:34px}
+section:first-of-type{margin-top:6px}
+h2.sec{font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-ink);
+  display:flex;align-items:center;gap:10px;margin-bottom:4px}
+h2.sec .n{font-family:"IBM Plex Mono";font-size:12px;background:var(--accent-soft);color:var(--accent-ink);
+  padding:2px 8px;border-radius:6px;font-weight:600;letter-spacing:0}
+h3{font-size:19px;font-weight:700;margin:26px 0 8px}
+h3 .zh-t{display:none}
+body.lang-zh h3 .en-t{display:none}
+p{margin:10px 0;max-width:72ch}
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:5px 0}
+strong{font-weight:600}
+.kicker{font-size:14px;color:var(--ink-soft);margin:0}
+
+/* stock chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;padding:6px 11px;border-radius:999px;border:1px solid}
+.chip .dot{width:8px;height:8px;border-radius:50%}
+.chip.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line));background:color-mix(in srgb,var(--good) 12%,var(--surface))}
+.chip.low{color:var(--low);border-color:color-mix(in srgb,var(--low) 40%,var(--line));background:color-mix(in srgb,var(--low) 12%,var(--surface))}
+.chip.oos{color:var(--oos);border-color:color-mix(in srgb,var(--oos) 40%,var(--line));background:color-mix(in srgb,var(--oos) 12%,var(--surface))}
+.chip.good .dot{background:var(--good)} .chip.low .dot{background:var(--low)} .chip.oos .dot{background:var(--oos)}
+
+/* tables */
+.tblwrap{overflow-x:auto;margin:14px 0;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+caption{caption-side:top;text-align:left;font-family:"IBM Plex Mono";font-size:12px;font-weight:600;color:var(--muted);padding:11px 14px;border-bottom:1px solid var(--line-soft)}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+thead th{background:var(--surface-2);font-family:"Archivo";font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 55%,transparent)}
+td .method{font-family:"IBM Plex Mono";font-size:12px;font-weight:600;padding:2px 6px;border-radius:5px;display:inline-block}
+.m-get{background:var(--accent-soft);color:var(--accent-ink)}
+.m-post{background:var(--ok-bg);color:var(--ok)}
+.m-put{background:var(--warn-bg);color:var(--warn)}
+.m-del{background:var(--crit-bg);color:var(--crit)}
+td .path{font-family:"IBM Plex Mono";font-size:13px;color:var(--ink)}
+.auth-pub{color:var(--faint)} .auth-req{color:var(--accent-ink);font-weight:600} .auth-adm{color:var(--warn);font-weight:600}
+td .yes{color:var(--good);font-weight:700} td .no{color:var(--faint)}
+.center{text-align:center}
+th.center{text-align:center}
+
+/* code blocks */
+pre{background:var(--code-bg);color:var(--code-ink);font-size:13px;line-height:1.6;padding:15px 17px;border-radius:11px;
+  overflow-x:auto;margin:14px 0;position:relative}
+pre .cm{color:#5f7a99}
+pre code{font-family:inherit}
+.codewrap{position:relative}
+.copy{position:absolute;top:9px;right:9px;border:1px solid #ffffff22;background:#ffffff10;color:var(--code-ink);
+  font:500 11px "IBM Plex Mono";padding:4px 8px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .15s}
+.codewrap:hover .copy{opacity:1}
+.copy:hover{background:#ffffff20}
+p code,li code,td code,.callout code,.kicker code{background:var(--surface-2);border:1px solid var(--line-soft);
+  padding:1px 5px;border-radius:5px;font-size:.86em;color:var(--ink)}
+
+/* architecture diagram */
+.diagram{margin:14px 0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 18px;box-shadow:var(--shadow);overflow-x:auto}
+.flow{display:flex;flex-direction:column;align-items:center;gap:0;min-width:520px}
+.node{border:1px solid var(--line);border-radius:10px;padding:11px 16px;background:var(--surface-2);text-align:center;min-width:230px}
+.node .h{font-family:"Archivo";font-weight:700;font-size:14px}
+.node .s{font-size:12px;color:var(--muted);margin-top:2px}
+.node.core{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.node.core .h{color:var(--accent-ink)}
+.arrow{color:var(--faint);font-family:"IBM Plex Mono";padding:4px 0;font-size:13px}
+.stores{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:2px}
+.store{border:1px dashed var(--line);border-radius:9px;padding:8px 12px;font-size:12px;text-align:center;background:var(--surface)}
+.store .k{font-family:"IBM Plex Mono";font-weight:600;color:var(--ink)}
+.store .v{color:var(--muted);font-size:11px}
+body.lang-zh .en{display:none}
+body.lang-en .zh{display:none}
+.two{display:none}
+body.lang-en .two .en{display:revert} body.lang-zh .two .zh{display:revert}
+
+/* footer */
+.foot{max-width:1180px;margin:0 auto;padding:22px 20px 40px;color:var(--faint);font-size:12px;border-top:1px solid var(--line-soft)}
+.foot .row{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+
+@media print{
+  .topbar,.toc,.ctrls,.copy{display:none!important}
+  body{background:#fff;color:#111;font-size:12px}
+  .layout{grid-template-columns:1fr;max-width:none;padding:0}
+  .docmeta,.tblwrap,.diagram{box-shadow:none;border-color:#ccc}
+  pre{background:#f5f5f5;color:#111;border:1px solid #ddd}
+  .surface{background:#fff}
+  section{break-inside:avoid-page}
+  .btn,.seg{display:none}
+  :root{--bg:#fff;--surface:#fff;--ink:#111;--muted:#555;--line:#ccc}
+}
+</style>
+</head>
+<body class="lang-en">
+
+<header class="topbar">
+  <div class="inner">
+    <div class="brand">
+      <div class="mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8V6l-9-4-9 4v2"/><path d="M3 8h18v12H3z"/><path d="M9 20V12h6v8"/></svg>
+      </div>
+      <div>
+        <h1 class="en">Inventory Dashboard</h1>
+        <h1 class="zh">库存仪表盘</h1>
+        <div class="sub en">System Documentation · EN / 中文</div>
+        <div class="sub zh">系统文档 · 英文 / 中文</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="ctrls">
+      <div class="seg" role="group" aria-label="Language">
+        <button id="l-en" aria-pressed="true">EN</button>
+        <button id="l-zh" aria-pressed="false">中文</button>
+      </div>
+      <button class="btn" onclick="window.print()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+        <span class="en">Print / PDF</span><span class="zh">打印 / PDF</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="toc" aria-label="Contents">
+    <div class="lab en">Contents</div>
+    <div class="lab zh">目录</div>
+    <div class="two"><div class="en">
+      <a href="#s1">1 · Overview</a><a href="#s2">2 · Architecture</a><a href="#s3">3 · Data model</a>
+      <a href="#s4">4 · API reference</a><a href="#s5">5 · Auth &amp; sessions</a><a href="#s6">6 · User flows</a>
+      <a href="#s7">7 · Operations</a><a href="#s8">8 · Security policy</a>
+    </div><div class="zh">
+      <a href="#s1">1 · 概述</a><a href="#s2">2 · 架构</a><a href="#s3">3 · 数据模型</a>
+      <a href="#s4">4 · API 参考</a><a href="#s5">5 · 认证与会话</a><a href="#s6">6 · 用户流程</a>
+      <a href="#s7">7 · 运维</a><a href="#s8">8 · 安全策略</a>
+    </div></div>
+  </nav>
+
+  <div class="content">
+    <div class="docmeta">
+      <div class="t two"><span class="en">System Documentation</span><span class="zh">系统文档</span></div>
+      <div class="d two"><span class="en">Architecture · data model · API · UX · security &amp; data policy</span><span class="zh">架构 · 数据模型 · API · 用户流程 · 安全与数据策略</span></div>
+      <div class="meta-grid">
+        <div><div class="k two"><span class="en">Version</span><span class="zh">版本</span></div><div class="v">1.0</div></div>
+        <div><div class="k two"><span class="en">Recorded</span><span class="zh">记录日期</span></div><div class="v">2026-10-14</div></div>
+        <div><div class="k two"><span class="en">Maintainer</span><span class="zh">维护者</span></div><div class="v">rhyzo</div></div>
+        <div><div class="k two"><span class="en">Scope</span><span class="zh">范围</span></div><div class="v two"><span class="en">Deployed system</span><span class="zh">已部署系统</span></div></div>
+      </div>
+    </div>
+
+    <div class="callout amber">
+      <svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div class="two"><div class="en"><strong>No secrets in this document.</strong> <code>AUTH_SECRET</code> and the Tigris access/secret keys are stored in Cloudflare (Pages secrets) and are intentionally omitted. Earlier drafts that leaked keys are discarded — treat any credential you find in old notes as compromised and rotate it.</div><div class="zh"><strong>本文档不包含任何密钥。</strong> <code>AUTH_SECRET</code> 与 Tigris 访问/密钥 保存在 Cloudflare（Pages Secrets）中，此处刻意省略。泄露过密钥的旧草稿已作废——在旧笔记中发现的任何凭证一律视为已泄露并立即轮换。</div></div>
+    </div>
+
+    <section id="s1">
+      <h2 class="sec"><span class="n">01</span><span class="en">Overview</span><span class="zh">概述</span></h2>
+      <div class="en">
+        <p>The Inventory Dashboard is a role-based web application for tracking consumable inventory — spare parts, lubricants, PPE, and similar stock-keeping items — across a facility. It supports:</p>
+        <ul>
+          <li>Searching, filtering, and paginating inventory items</li>
+          <li>Adding / editing items: SKU, quantity, thresholds, category, <strong>unit of measure</strong>, bin location, production/expiry dates, specification, and a photo</li>
+          <li>Storing item photos</li>
+          <li>Export to CSV or XLSX</li>
+          <li>Role-based user management (admin / editor / viewer)</li>
+          <li>Managing reference data: <strong>categories</strong> and <strong>units</strong></li>
+          <li>App-wide settings (currently the company name)</li>
+        </ul>
+        <p>The entire stack runs on Cloudflare free-tier services, so ongoing cost is ~$0/month for light internal use.</p>
+      </div>
+      <div class="zh">
+        <p>库存仪表盘（Inventory Dashboard）是一款基于角色的 Web 应用，用于管理一个厂区内的可消耗库存（备件、润滑油、劳保用品等）。其核心能力包括：</p>
+        <ul>
+          <li>对库存条目进行搜索、筛选与分页浏览</li>
+          <li>新增 / 编辑条目：SKU、数量、阈值、类别、<strong>计量单位</strong>、货位、生产/到期日期、规格、照片</li>
+          <li>条目图片的存储</li>
+          <li>导出 CSV 或 XLSX</li>
+          <li>基于角色的用户管理（管理员 / 编辑 / 查看）</li>
+          <li>参考数据管理：<strong>类别</strong> 与 <strong>单位</strong></li>
+          <li>应用级设置（目前为：公司名称）</li>
+        </ul>
+        <p>整个技术栈运行在 Cloudflare 免费额度内，轻度内部使用下持续成本约为 $0/月。</p>
+      </div>
+    </section>
+
+    <section id="s2">
+      <h2 class="sec"><span class="n">02</span><span class="en">System architecture</span><span class="zh">系统架构</span></h2>
+      <h3><span class="en">Components</span><span class="zh">组成</span></h3>
+      <div class="en">
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>Layer</th><th>Technology</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td>Frontend</td><td>React 18 + TypeScript + Vite + Tailwind v3</td><td>Single-page application (SPA)</td></tr>
+              <tr><td>Backend</td><td>Cloudflare Pages Functions (TypeScript)</td><td>REST API</td></tr>
+              <tr><td>Relational data</td><td>Cloudflare <strong>D1</strong> (SQLite, UUID keys)</td><td>Items, users, tokens, categories, units, settings</td></tr>
+              <tr><td>Object storage</td><td><strong>Tigris</strong> (S3-compatible)</td><td>Item photos</td></tr>
+              <tr><td>Rate limiting</td><td>Cloudflare <strong>KV</strong> <code>RATE_LIMIT</code></td><td>Per-IP throttle for inventory &amp; upload</td></tr>
+              <tr><td>Secrets</td><td>Cloudflare <strong>Pages secrets</strong></td><td><code>AUTH_SECRET</code>, Tigris access/secret keys</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="zh">
+        <div class="tblwrap">
+          <table>
+            <thead><tr><th>层</th><th>技术</th><th>职责</th></tr></thead>
+            <tbody>
+              <tr><td>前端</td><td>React 18 + TypeScript + Vite + Tailwind v3</td><td>单页应用（SPA）</td></tr>
+              <tr><td>后端</td><td>Cloudflare Pages Functions（TypeScript）</td><td>REST API</td></tr>
+              <tr><td>关系数据</td><td>Cloudflare <strong>D1</strong>（SQLite，UUID 主键）</td><td>条目、用户、令牌、类别、单位、设置</td></tr>
+              <tr><td>对象存储</td><td><strong>Tigris</strong>（S3 兼容）</td><td>条目照片</td></tr>
+              <tr><td>限流</td><td>Cloudflare <strong>KV</strong> <code>RATE_LIMIT</code></td><td>库存与上传接口按 IP 节流</td></tr>
+              <tr><td>密钥</td><td>Cloudflare <strong>Pages Secrets</strong></td><td><code>AUTH_SECRET</code>、Tigris 访问/密钥</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="diagram">
+        <div class="flow">
+          <div class="node"><div class="h">Browser — React SPA</div><div class="s">auth via httpOnly cookies</div></div>
+          <div class="arrow">↓</div>
+          <div class="node core"><div class="h">Cloudflare Pages Functions</div><div class="s">TypeScript REST API + security headers</div></div>
+          <div class="arrow">↓</div>
+          <div class="stores">
+            <div class="store"><div class="k">D1</div><div class="v">SQLite data</div></div>
+            <div class="store"><div class="k">Tigris</div><div class="v">images</div></div>
+            <div class="store"><div class="k">KV</div><div class="v">rate limit</div></div>
+            <div class="store"><div class="k">Secrets</div><div class="v">AUTH + Tigris keys</div></div>
+          </div>
+        </div>
+      </div>
+
+      <h3><span class="en">Key design decisions</span><span class="zh">关键设计决策</span></h3>
+      <div class="en">
+        <ul>
+          <li><strong>D1, not Turso.</strong> The current system uses Cloudflare D1. (Earlier drafts describing a Turso + read-only + no-auth design are obsolete.)</li>
+          <li><strong>UUID primary keys.</strong> No rowId / auto-increment; IDs are generated server-side with <code>crypto.randomUUID()</code> and are strings — never parse them as integers.</li>
+          <li><strong>Units denormalized by name.</strong> <code>consumable_item.unit</code> stores the unit's <em>name</em> (TEXT), the same pattern as <code>category</code>. Deleting a unit is blocked while any item references it.</li>
+          <li><strong>Tigris has no object ACLs.</strong> Images are served through the same-origin proxy <code>GET /api/images/{key}</code> so the SPA's CSP (<code>img-src 'self' data: blob:</code>) can load them.</li>
+          <li><strong>No auto-migrations.</strong> Schema changes are SQL files in <code>migrations/</code>, applied manually to remote D1 (§7.3).</li>
+        </ul>
+      </div>
+      <div class="zh">
+        <ul>
+          <li><strong>使用 D1，而非 Turso。</strong> 当前系统采用 Cloudflare D1。（早期草稿中“Turso + 只读 + 无鉴权”的方案已作废。）</li>
+          <li><strong>UUID 主键。</strong> 无 rowId / 自增；ID 在服务端用 <code>crypto.randomUUID()</code> 生成，是字符串——切勿按整数解析。</li>
+          <li><strong>单位按名称去规范化。</strong> <code>consumable_item.unit</code> 存储单位的<em>名称</em>（TEXT），与 <code>category</code> 相同；只要有条目引用，该单位即不可删除。</li>
+          <li><strong>Tigris 无对象 ACL。</strong> 图片通过同源代理 <code>GET /api/images/{key}</code> 提供，使 SPA 的 CSP（<code>img-src 'self' data: blob:</code>）能加载它们。</li>
+          <li><strong>无自动迁移。</strong> 结构变更是 <code>migrations/</code> 下的 SQL 文件，手动应用到远端 D1（§7.3）。</li>
+        </ul>
+      </div>
+    </section>
+    <section id="s3">
+      <h2 class="sec"><span class="n">03</span><span class="en">Data model (D1)</span><span class="zh">数据模型（D1）</span></h2>
+      <div class="en"><p>All tables use TEXT UUID primary keys.</p></div>
+      <div class="zh"><p>所有表均使用 TEXT 类型 UUID 主键。</p></div>
+
+      <h3><span class="en">consumable_item</span><span class="zh">consumable_item</span></h3>
+      <div class="en">
+        <div class="tblwrap"><table>
+          <thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">id</td><td>TEXT (UUID)</td><td>primary key</td></tr>
+            <tr><td class="mono">facility_id</td><td>TEXT</td><td>facility reference</td></tr>
+            <tr><td class="mono">sku</td><td>TEXT</td><td>item code — uniqueness dropped in 0004, items may share SKU</td></tr>
+            <tr><td class="mono">name</td><td>TEXT</td><td>required</td></tr>
+            <tr><td class="mono">description</td><td>TEXT</td><td>optional</td></tr>
+            <tr><td class="mono">category</td><td>TEXT</td><td>category <strong>name</strong> (nullable)</td></tr>
+            <tr><td class="mono">unit</td><td>TEXT</td><td>unit <strong>name</strong> (nullable; added in 0005)</td></tr>
+            <tr><td class="mono">quantity</td><td>INTEGER</td><td>current quantity</td></tr>
+            <tr><td class="mono">min_threshold / max_threshold</td><td>INTEGER</td><td>stock levels</td></tr>
+            <tr><td class="mono">bin_location</td><td>TEXT</td><td>optional</td></tr>
+            <tr><td class="mono">production_date / expiry_date</td><td>TEXT (date)</td><td>optional</td></tr>
+            <tr><td class="mono">image_url</td><td>TEXT</td><td>points at <code>/api/images/{key}</code> (nullable)</td></tr>
+            <tr><td class="mono">creator_id / updater_id</td><td>TEXT</td><td>audit refs to <code>users.id</code></td></tr>
+            <tr><td class="mono">created_at / updated_at</td><td>TEXT</td><td>timestamps</td></tr>
+            <tr><td class="mono">specification</td><td>TEXT</td><td>optional</td></tr>
+          </tbody>
+        </table></div>
+        <div class="kicker">Stock status is derived, not stored:</div>
+        <div class="chips">
+          <span class="chip oos"><span class="dot"></span>Out of Stock — quantity ≤ 0</span>
+          <span class="chip low"><span class="dot"></span>Low Stock — 0 &lt; quantity &lt; min</span>
+          <span class="chip good"><span class="dot"></span>Adequate — quantity ≥ min</span>
+        </div>
+      </div>
+      <div class="zh">
+        <div class="tblwrap"><table>
+          <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">id</td><td>TEXT (UUID)</td><td>主键</td></tr>
+            <tr><td class="mono">facility_id</td><td>TEXT</td><td>厂区引用</td></tr>
+            <tr><td class="mono">sku</td><td>TEXT</td><td>物料编码 — 0004 取消唯一约束，条目可共用 SKU</td></tr>
+            <tr><td class="mono">name</td><td>TEXT</td><td>必填</td></tr>
+            <tr><td class="mono">description</td><td>TEXT</td><td>可选</td></tr>
+            <tr><td class="mono">category</td><td>TEXT</td><td>类别<strong>名称</strong>（可空）</td></tr>
+            <tr><td class="mono">unit</td><td>TEXT</td><td>单位<strong>名称</strong>（可空；0005 新增）</td></tr>
+            <tr><td class="mono">quantity</td><td>INTEGER</td><td>当前数量</td></tr>
+            <tr><td class="mono">min_threshold / max_threshold</td><td>INTEGER</td><td>库存阈值</td></tr>
+            <tr><td class="mono">bin_location</td><td>TEXT</td><td>货位，可选</td></tr>
+            <tr><td class="mono">production_date / expiry_date</td><td>TEXT (日期)</td><td>可选</td></tr>
+            <tr><td class="mono">image_url</td><td>TEXT</td><td>指向 <code>/api/images/{key}</code>（可空）</td></tr>
+            <tr><td class="mono">creator_id / updater_id</td><td>TEXT</td><td>指向 <code>users.id</code> 的审计字段</td></tr>
+            <tr><td class="mono">created_at / updated_at</td><td>TEXT</td><td>时间戳</td></tr>
+            <tr><td class="mono">specification</td><td>TEXT</td><td>规格，可选</td></tr>
+          </tbody>
+        </table></div>
+        <div class="kicker">库存状态为派生值（不入库）：</div>
+        <div class="chips">
+          <span class="chip oos"><span class="dot"></span>缺货 — 数量 ≤ 0</span>
+          <span class="chip low"><span class="dot"></span>低库存 — 0 &lt; 数量 &lt; min</span>
+          <span class="chip good"><span class="dot"></span>充足 — 数量 ≥ min</span>
+        </div>
+      </div>
+
+      <div class="en">
+        <div class="tblwrap"><table>
+          <caption>Supporting tables</caption>
+          <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">users</td><td><code>username</code> (unique), <code>password_hash</code> (PBKDF2), <code>role</code> (admin|editor|viewer), <code>is_locked</code>, <code>locked_until</code>, <code>failed_attempts</code></td></tr>
+            <tr><td class="mono">refresh_tokens</td><td>opaque refresh tokens: <code>token</code>, <code>user_id</code>, <code>expires_at</code> — rotated on every refresh, deleted on logout</td></tr>
+            <tr><td class="mono">login_attempts</td><td><code>ip</code>, <code>attempted_at</code>, <code>success</code> — per-IP login rate limit</td></tr>
+            <tr><td class="mono">categories</td><td><code>name</code> (unique), <code>color</code> — deleting a category in use is blocked</td></tr>
+            <tr><td class="mono">units</td><td><code>name</code> (unique, case-insensitive) — seeded <code>pc, kg, L, drum, box, pallet</code>; delete blocked while in use</td></tr>
+            <tr><td class="mono">app_settings</td><td>key/value — currently one row: <code>company_name</code></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="zh">
+        <div class="tblwrap"><table>
+          <caption>辅助表</caption>
+          <thead><tr><th>表</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">users</td><td><code>username</code>（唯一）、<code>password_hash</code>（PBKDF2）、<code>role</code>（admin|editor|viewer）、<code>is_locked</code>、<code>locked_until</code>、<code>failed_attempts</code></td></tr>
+            <tr><td class="mono">refresh_tokens</td><td>不透明刷新令牌：<code>token</code>、<code>user_id</code>、<code>expires_at</code>——每次刷新轮转，退出时删除</td></tr>
+            <tr><td class="mono">login_attempts</td><td><code>ip</code>、<code>attempted_at</code>、<code>success</code>——按 IP 的登录限流</td></tr>
+            <tr><td class="mono">categories</td><td><code>name</code>（唯一）、<code>color</code>——使用中不可删除</td></tr>
+            <tr><td class="mono">units</td><td><code>name</code>（唯一，不区分大小写）——预置 <code>pc, kg, L, drum, box, pallet</code>；使用中不可删除</td></tr>
+            <tr><td class="mono">app_settings</td><td>键值对——当前仅一行：<code>company_name</code></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <section id="s4">
+      <h2 class="sec"><span class="n">04</span><span class="en">API reference</span><span class="zh">API 参考</span></h2>
+      <div class="en"><p>All responses are JSON. Auth endpoints set/read <code>httpOnly</code> cookies.</p></div>
+      <div class="zh"><p>所有响应均为 JSON。鉴权相关端点通过 <code>httpOnly</code> Cookie 读写。</p></div>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th class="en">Purpose</th><th class="zh">用途</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/auth/login</td><td class="auth-pub">public</td><td class="en">Authenticate; set <code>auth_token</code> + <code>refresh_token</code></td><td class="zh">登录；写入两个 Cookie</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/auth/refresh</td><td class="auth-pub">refresh cookie</td><td class="en">Rotate session (renew an expired access token)</td><td class="zh">轮转会话（刷新过期的访问令牌）</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/auth/logout</td><td class="auth-req">required</td><td class="en">Revoke refresh token; clear both cookies</td><td class="zh">吊销刷新令牌；清除两个 Cookie</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/users/me</td><td class="auth-req">required</td><td class="en">Current user</td><td class="zh">当前用户</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/users</td><td class="auth-adm">admin</td><td class="en">List users</td><td class="zh">用户列表</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/users</td><td class="auth-adm">admin</td><td class="en">Create user (HIBP + strength check)</td><td class="zh">新建用户（HIBP + 强度校验）</td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/users/:id</td><td class="auth-adm">admin</td><td class="en">Update role / lock / password</td><td class="zh">修改角色 / 锁定 / 密码</td></tr>
+            <tr><td><span class="method m-del">DELETE</span></td><td class="path">/api/users/:id</td><td class="auth-adm">admin</td><td class="en">Delete user</td><td class="zh">删除用户</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/categories</td><td class="auth-pub">public</td><td class="en">List categories</td><td class="zh">类别列表</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/categories</td><td class="auth-req">editor+</td><td class="en">Create category</td><td class="zh">新建类别</td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/categories/:id</td><td class="auth-req">editor+</td><td class="en">Update category</td><td class="zh">更新类别</td></tr>
+            <tr><td><span class="method m-del">DELETE</span></td><td class="path">/api/categories/:id</td><td class="auth-adm">admin</td><td class="en">Delete category (409 if in use)</td><td class="zh">删除类别（使用中 409）</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/units</td><td class="auth-pub">public</td><td class="en">List units</td><td class="zh">单位列表</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/units</td><td class="auth-req">editor+</td><td class="en">Create unit (name, 1–20 chars)</td><td class="zh">新建单位（名称，1–20 字符）</td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/units/:id</td><td class="auth-req">editor+</td><td class="en">Rename unit</td><td class="zh">重命名单位</td></tr>
+            <tr><td><span class="method m-del">DELETE</span></td><td class="path">/api/units/:id</td><td class="auth-adm">admin</td><td class="en">Delete unit (409 if in use)</td><td class="zh">删除单位（使用中 409）</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/inventory</td><td class="auth-req">required</td><td class="en">List items (filter + pagination)</td><td class="zh">条目列表（筛选 + 分页）</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/inventory</td><td class="auth-req">editor+</td><td class="en">Create item</td><td class="zh">新建条目</td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/inventory/:id</td><td class="auth-req">editor+</td><td class="en">Update item</td><td class="zh">更新条目</td></tr>
+            <tr><td><span class="method m-del">DELETE</span></td><td class="path">/api/inventory/:id</td><td class="auth-adm">admin</td><td class="en">Delete item</td><td class="zh">删除条目</td></tr>
+            <tr><td><span class="method m-post">POST</span></td><td class="path">/api/upload</td><td class="auth-req">editor+</td><td class="en">Upload image to Tigris (returns object key)</td><td class="zh">上传图片到 Tigris（返回对象 key）</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/images/:key</td><td class="auth-pub">public</td><td class="en">Proxy an image from Tigris</td><td class="zh">从 Tigris 代理返回图片</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/stats</td><td class="auth-req">required</td><td class="en">Aggregate statistics</td><td class="zh">聚合统计</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/settings</td><td class="auth-req">required</td><td class="en">App settings (<code>company_name</code>)</td><td class="zh">应用设置（<code>company_name</code>）</td></tr>
+            <tr><td><span class="method m-put">PUT</span></td><td class="path">/api/settings</td><td class="auth-adm">admin</td><td class="en">Update settings</td><td class="zh">更新设置</td></tr>
+            <tr><td><span class="method m-get">GET</span></td><td class="path">/api/export</td><td class="auth-req">required</td><td class="en">CSV or XLSX of the current filter</td><td class="zh">按当前筛选导出 CSV 或 XLSX</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="en"><p><code>stats</code> returns <code>{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }</code> where <strong>expiring_soon</strong> means within <strong>30 days</strong>. The XLSX export columns are <em>Item Code (SKU), Item Name, Specification, Location, Manufacturing Date, Expiration Date, Current Quantity</em>, with the quantity cell color-coded by stock status.</p></div>
+      <div class="zh"><p><code>stats</code> 返回 <code>{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }</code>，其中<strong>即将到期</strong>指 <strong>30 天内</strong>。XLSX 导出列为<em>物料编码 (SKU)、名称、规格、货位、生产日期、到期日期、当前数量</em>，数量单元格按库存状态着色。</p></div>
+    </section>
+
+    <section id="s5">
+      <h2 class="sec"><span class="n">05</span><span class="en">Authentication &amp; sessions</span><span class="zh">认证与会话策略</span></h2>
+      <h3><span class="en">Tokens</span><span class="zh">令牌</span></h3>
+      <div class="en">
+        <ul>
+          <li><strong>Access token:</strong> JWT, <code>HS256</code>, <strong>8-hour</strong> lifetime, delivered in the <code>auth_token</code> cookie. (The file header in <code>functions/lib/auth.ts</code> still says "15-minute" — that comment is stale; the code is <code>ACCESS_TOKEN_TTL_MS = 8*60*60*1000</code>.)</li>
+          <li><strong>Refresh token:</strong> opaque, <strong>7-day</strong> lifetime, stored in D1 <code>refresh_tokens</code>, delivered in the <code>refresh_token</code> cookie. <strong>Rotated on every refresh</strong> (the used token is deleted, a new one stored).</li>
+          <li>Cookies: <code>HttpOnly; Secure; SameSite=Strict; Path=/</code>.</li>
+        </ul>
+      </div>
+      <div class="zh">
+        <ul>
+          <li><strong>访问令牌：</strong> JWT，<code>HS256</code>，<strong>8 小时</strong>有效期，经 <code>auth_token</code> Cookie 下发。（<code>functions/lib/auth.ts</code> 文件头仍写“15 分钟”——注释已过时；代码为 <code>ACCESS_TOKEN_TTL_MS = 8*60*60*1000</code>。）</li>
+          <li><strong>刷新令牌：</strong> 不透明，<strong>7 天</strong>有效期，存于 D1 <code>refresh_tokens</code>，经 <code>refresh_token</code> Cookie 下发。<strong>每次刷新都轮转</strong>（删除旧令牌、写入新令牌）。</li>
+          <li>Cookie 属性：<code>HttpOnly; Secure; SameSite=Strict; Path=/</code>。</li>
+        </ul>
+      </div>
+
+      <h3><span class="en">Passwords</span><span class="zh">密码</span></h3>
+      <div class="en">
+        <ul>
+          <li>Hashed with <strong>PBKDF2-SHA256, 100,000 iterations, 16-byte salt</strong>, stored as <code>base64(salt):base64(hash)</code>.</li>
+          <li>Policy: <strong>8–128 characters, at least one letter and one number.</strong></li>
+          <li>New / reset passwords are checked against a breach list (<strong>HIBP k-anonymity</strong>) and rejected if too common.</li>
+        </ul>
+      </div>
+      <div class="zh">
+        <ul>
+          <li>使用 <strong>PBKDF2-SHA256、100,000 次迭代、16 字节盐</strong> 哈希，存储格式 <code>base64(salt):base64(hash)</code>。</li>
+          <li>策略：<strong>8–128 字符，至少含一个字母和一个数字。</strong></li>
+          <li>新建/重置密码先经泄露库（<strong>HIBP k-匿名</strong>）校验，过于常见的密码被拒绝。</li>
+        </ul>
+      </div>
+
+      <h3><span class="en">Rate limiting</span><span class="zh">限流</span></h3>
+      <div class="en">
+        <div class="tblwrap"><table>
+          <thead><tr><th>Scope</th><th>Limit</th><th>Storage</th></tr></thead>
+          <tbody>
+            <tr><td>Login, per IP</td><td>5 attempts / <strong>15-minute</strong> rolling window</td><td>D1 <code>login_attempts</code></td></tr>
+            <tr><td>Login, per account</td><td>5 consecutive failures → <strong>15-minute</strong> lockout</td><td><code>users.failed_attempts</code></td></tr>
+            <tr><td>Inventory endpoints</td><td>30 req/min per IP</td><td>KV <code>RATE_LIMIT</code></td></tr>
+            <tr><td>Upload endpoint</td><td>10 req/min per IP</td><td>KV <code>RATE_LIMIT</code></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="zh">
+        <div class="tblwrap"><table>
+          <thead><tr><th>范围</th><th>限制</th><th>存储位置</th></tr></thead>
+          <tbody>
+            <tr><td>登录，按 IP</td><td>5 次 / <strong>15 分钟</strong>滚动窗口</td><td>D1 <code>login_attempts</code></td></tr>
+            <tr><td>登录，按账号</td><td>连续 5 次失败 → <strong>15 分钟</strong>锁定</td><td><code>users.failed_attempts</code></td></tr>
+            <tr><td>库存接口</td><td>30 次/分钟（按 IP）</td><td>KV <code>RATE_LIMIT</code></td></tr>
+            <tr><td>上传接口</td><td>10 次/分钟（按 IP）</td><td>KV <code>RATE_LIMIT</code></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+
+      <h3><span class="en">Roles</span><span class="zh">角色</span></h3>
+      <div class="en"><p class="kicker"><code>admin &gt; editor &gt; viewer</code></p></div>
+      <div class="zh"><p class="kicker"><code>admin &gt; editor &gt; viewer</code>（管理员 &gt; 编辑 &gt; 查看）</p></div>
+      <div class="tblwrap"><table>
+        <thead><tr><th class="en">Capability</th><th class="zh">能力</th><th class="center">Admin</th><th class="center">Editor</th><th class="center">Viewer</th></tr></thead>
+        <tbody>
+          <tr><td class="en">View items, stats, export, images</td><td class="zh">查看条目、统计、导出、图片</td><td class="center yes">✓</td><td class="center yes">✓</td><td class="center yes">✓</td></tr>
+          <tr><td class="en">Add / edit items &amp; images</td><td class="zh">新增 / 编辑条目与图片</td><td class="center yes">✓</td><td class="center yes">✓</td><td class="center no">—</td></tr>
+          <tr><td class="en">Delete items</td><td class="zh">删除条目</td><td class="center yes">✓</td><td class="center no">—</td><td class="center no">—</td></tr>
+          <tr><td class="en">Manage categories &amp; units (add/edit)</td><td class="zh">管理类别与单位（新增/编辑）</td><td class="center yes">✓</td><td class="center yes">✓</td><td class="center no">—</td></tr>
+          <tr><td class="en">Delete categories / units</td><td class="zh">删除类别 / 单位</td><td class="center yes">✓</td><td class="center no">—</td><td class="center no">—</td></tr>
+          <tr><td class="en">Manage users</td><td class="zh">管理用户</td><td class="center yes">✓</td><td class="center no">—</td><td class="center no">—</td></tr>
+          <tr><td class="en">Manage settings</td><td class="zh">管理设置</td><td class="center yes">✓</td><td class="center no">—</td><td class="center no">—</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="s6">
+      <h2 class="sec"><span class="n">06</span><span class="en">User flows</span><span class="zh">用户流程</span></h2>
+      <div class="en">
+        <h3>Loading the app</h3>
+        <p><code>src/main.tsx</code> mounts <code>Root</code>, which calls <code>GET /api/users/me</code> on start: <strong>200</strong> → dashboard (<code>App.tsx</code>); <strong>401 / error</strong> → login page.</p>
+        <h3>Logging in</h3>
+        <p>Enter username + password → <code>POST /api/auth/login</code>. On success the server sets both cookies and the app reloads into the dashboard. A wrong/unknown credential returns a uniform "Invalid username or password" (no user enumeration).</p>
+        <h3>Dashboard</h3>
+        <p>Four stat cards (Total / Low Stock / Out of Stock / Expiring Soon), a Filters row (search, category, status, view + Reset), an Export button (CSV / XLSX of the current filter), and the inventory table with pagination (10 / 25 / 50 / 100 per page). The quantity cell shows the value plus its unit, e.g. <code>12 L</code>.</p>
+        <h3>Edit / add item</h3>
+        <p>The Add / pencil button opens the edit modal: SKU (locked on edit), Name, Category, <strong>Unit</strong> (managed list, with a <code>(legacy)</code> option for values not in the list), quantity + min/max thresholds, bin location, production/expiry dates, specification, description, and an image preview (remove via the 🗑 button).</p>
+        <h3>Images</h3>
+        <p>Editors can upload (camera icon), view (click thumbnail → lightbox), or remove an item photo. Uploads go to Tigris and are read back through the <code>/api/images/{key}</code> proxy.</p>
+        <h3>Admin panels (header, role-gated)</h3>
+        <ul>
+          <li><strong>Users</strong> (admin): create / edit / lock / delete users.</li>
+          <li><strong>Categories</strong> (editor+): add / rename / delete (delete admin-only, in-use guarded).</li>
+          <li><strong>Units</strong> (editor+): add / rename / delete (delete admin-only, in-use guarded).</li>
+          <li><strong>Settings</strong> (admin): edit <code>company_name</code>.</li>
+        </ul>
+        <h3>Logging out &amp; silent refresh</h3>
+        <p><code>POST /api/auth/logout</code> revokes the refresh token and clears both cookies. If a data request returns <strong>401</strong>, the app first tries <code>POST /api/auth/refresh</code> (using the refresh cookie) and retries; only if that also fails does it force a logout. This keeps sessions alive within the 7-day refresh window.</p>
+      </div>
+      <div class="zh">
+        <h3>加载应用</h3>
+        <p><code>src/main.tsx</code> 挂载 <code>Root</code>，启动时调用 <code>GET /api/users/me</code>：<strong>200</strong> → 仪表盘（<code>App.tsx</code>）；<strong>401 / 异常</strong> → 登录页。</p>
+        <h3>登录</h3>
+        <p>输入用户名 + 密码 → <code>POST /api/auth/login</code>。成功后服务端写入两个 Cookie，应用重载进入仪表盘。用户名或密码错误时统一返回 "Invalid username or password"（不泄露账号是否存在）。</p>
+        <h3>仪表盘</h3>
+        <p>四张统计卡（总数 / 低库存 / 缺货 / 即将到期）、筛选行（搜索、类别、状态、视图 + 重置）、导出按钮（按当前筛选导出 CSV / XLSX），以及带分页（每页 10 / 25 / 50 / 100）的库存表格。数量列显示数值加单位，例如 <code>12 L</code>。</p>
+        <h3>编辑 / 新增条目</h3>
+        <p>Add / 铅笔按钮打开编辑弹窗：SKU（编辑时锁定）、名称、类别、<strong>单位</strong>（受管列表，对不在列表中的旧值提供 <code>(legacy)</code> 选项）、数量与最小/最大阈值、货位、生产/到期日期、规格、描述，以及图片预览（可点 🗑 移除）。</p>
+        <h3>图片</h3>
+        <p>编辑者可上传（相机图标）、查看（点击缩略图 → 灯箱）、移除条目照片。图片上传到 Tigris，并经 <code>/api/images/{key}</code> 代理读取。</p>
+        <h3>管理面板（页头，按角色显示）</h3>
+        <ul>
+          <li><strong>用户</strong>（admin）：新建 / 编辑 / 锁定 / 删除用户。</li>
+          <li><strong>类别</strong>（editor+）：新增 / 重命名 / 删除（删除仅 admin，使用中受保护）。</li>
+          <li><strong>单位</strong>（editor+）：新增 / 重命名 / 删除（删除仅 admin，使用中受保护）。</li>
+          <li><strong>设置</strong>（admin）：编辑 <code>company_name</code>。</li>
+        </ul>
+        <h3>退出与静默刷新</h3>
+        <p><code>POST /api/auth/logout</code> 吊销刷新令牌并清除两个 Cookie。若某数据请求返回 <strong>401</strong>，应用先尝试 <code>POST /api/auth/refresh</code>（用 refresh Cookie）并重试；只有它也失败时才强制登出。这让 7 天刷新窗口内的长会话保持有效。</p>
+      </div>
+    </section>
+
+    <section id="s7">
+      <h2 class="sec"><span class="n">07</span><span class="en">Operations</span><span class="zh">运维</span></h2>
+      <div class="en">
+        <h3>Build &amp; deploy</h3>
+        <div class="codewrap"><button class="copy">copy</button><pre>npm run deploy
+<span class="cm"># = npm run build &amp;&amp; npx wrangler pages deploy dist --project-name=inventory-dashboard</span></pre></div>
+        <p>Static bundle → <code>dist/</code>; functions bundled alongside. Alternatively connect the repo to Cloudflare Pages (Vite preset, build <code>npm run build</code>, output <code>dist</code>) for push-to-deploy.</p>
+        <h3>Local development</h3>
+        <div class="codewrap"><button class="copy">copy</button><pre>npm run dev                       <span class="cm"># Vite (functions not available)</span>
+npx wrangler pages dev dist --d1=DB --vars-file=.env   <span class="cm"># full stack locally</span></pre></div>
+        <h3>Database migrations</h3>
+        <p>Apply each file to remote D1 <strong>in numeric order</strong> (idempotent-ish; run once). There is no auto-runner. Migrations: <code>0001</code> initial schema, <code>0002</code> auth tables, <code>0003</code> app_settings, <code>0004</code> remove SKU uniqueness, <code>0005</code> units.</p>
+        <div class="codewrap"><button class="copy">copy</button><pre>npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_units.sql</pre></div>
+        <h3>Secrets management</h3>
+        <p><code>AUTH_SECRET</code>, <code>TIGRIS_ACCESS_KEY_ID</code>, <code>TIGRIS_SECRET_ACCESS_KEY</code> live in Cloudflare (Pages secrets / dashboard). <strong>Rotating <code>AUTH_SECRET</code> invalidates every active session</strong> (all existing JWTs void; users re-login). Non-secret config (<code>TIGRIS_BUCKET</code>, <code>TIGRIS_ENDPOINT</code>, <code>FACILITY_ID</code>) goes in <code>wrangler.toml</code> <code>[vars]</code>.</p>
+        <h3>Cost</h3>
+        <p>All services run within Cloudflare / Tigris free tiers — ~$0/month for light internal use.</p>
+      </div>
+      <div class="zh">
+        <h3>构建与部署</h3>
+        <div class="codewrap"><button class="copy">copy</button><pre>npm run deploy
+<span class="cm"># = npm run build &amp;&amp; npx wrangler pages deploy dist --project-name=inventory-dashboard</span></pre></div>
+        <p>静态资源 → <code>dist/</code>，函数一同打包。也可将仓库连接到 Cloudflare Pages（Vite 预设，构建 <code>npm run build</code>，输出 <code>dist</code>）实现推送即部署。</p>
+        <h3>本地开发</h3>
+        <div class="codewrap"><button class="copy">copy</button><pre>npm run dev                       <span class="cm"># Vite（本地不可用函数）</span>
+npx wrangler pages dev dist --d1=DB --vars-file=.env   <span class="cm"># 本地完整栈</span></pre></div>
+        <h3>数据库迁移</h3>
+        <p>按<strong>数字顺序</strong>将每个文件应用到远端 D1（大致幂等；只跑一次）。没有自动运行器。迁移：<code>0001</code> 初始结构、<code>0002</code> 鉴权表、<code>0003</code> app_settings、<code>0004</code> 取消 SKU 唯一、<code>0005</code> 单位。</p>
+        <div class="codewrap"><button class="copy">copy</button><pre>npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_units.sql</pre></div>
+        <h3>密钥管理</h3>
+        <p><code>AUTH_SECRET</code>、<code>TIGRIS_ACCESS_KEY_ID</code>、<code>TIGRIS_SECRET_ACCESS_KEY</code> 存放在 Cloudflare（Pages Secrets / 控制台）。<strong>轮换 <code>AUTH_SECRET</code> 会使所有活跃会话失效</strong>（既有 JWT 全部作废，用户需重新登录）。非密钥配置（<code>TIGRIS_BUCKET</code>、<code>TIGRIS_ENDPOINT</code>、<code>FACILITY_ID</code>）放在 <code>wrangler.toml</code> <code>[vars]</code>。</p>
+        <h3>成本</h3>
+        <p>各服务均在 Cloudflare / Tigris 免费额度内，轻度内部使用下约 $0/月。</p>
+      </div>
+    </section>
+
+    <section id="s8">
+      <h2 class="sec"><span class="n">08</span><span class="en">Security policy</span><span class="zh">安全策略</span></h2>
+      <div class="en">
+        <ul>
+          <li><strong>Response headers</strong> (applied by <code>functions/_middleware.ts</code> on every response): a strict same-origin <code>Content-Security-Policy</code> (<code>default-src 'self'</code>; <code>img-src 'self' data: blob:</code> — images load only via the same-origin <code>/api/images/</code> proxy plus client-side <code>data:</code>/<code>blob:</code> compression), <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code>, <code>Permissions-Policy</code> (camera / microphone / geolocation disabled), and <code>Strict-Transport-Security</code> (1 year, includeSubDomains).</li>
+          <li><strong>Secrets</strong> are never committed, never in the docs, and never returned by the API.</li>
+          <li><strong>Least-privilege roles</strong> (§5); destructive actions (delete item / category / unit, user &amp; settings management) are admin-only.</li>
+          <li><strong>In-use guards</strong> prevent deleting a category or unit that items still reference.</li>
+          <li><strong>Rate limiting</strong> (§5.3) throttles login, inventory, and upload abuse.</li>
+          <li><strong>Cred-leak history:</strong> the Tigris keys and a default admin password that appeared in an earlier document are revoked / removed and must <strong>not</strong> reappear. If any of them surface again, treat them as compromised and rotate immediately.</li>
+        </ul>
+      </div>
+      <div class="zh">
+        <ul>
+          <li><strong>响应头</strong>（由 <code>functions/_middleware.ts</code> 对每个响应统一设置）：严格的同源 <code>Content-Security-Policy</code>（<code>default-src 'self'</code>；<code>img-src 'self' data: blob:</code>——图片只经由同源的 <code>/api/images/</code> 代理、以及 <code>data:</code>/<code>blob:</code> 客户端压缩图加载）、<code>X-Frame-Options: DENY</code>、<code>X-Content-Type-Options: nosniff</code>、<code>Referrer-Policy: strict-origin-when-cross-origin</code>、<code>Permissions-Policy</code>（禁用摄像头 / 麦克风 / 地理位置）、以及 <code>Strict-Transport-Security</code>（1 年，includeSubDomains）。</li>
+          <li><strong>密钥</strong>从不提交、不写入文档、也不由 API 返回。</li>
+          <li><strong>最小权限角色</strong>（§5）；破坏性操作（删除条目 / 类别 / 单位、用户与设置管理）仅 admin。</li>
+          <li><strong>使用保护</strong>防止删除仍被条目引用的类别或单位。</li>
+          <li><strong>限流</strong>（§5.3）抑制登录、库存、上传的滥用。</li>
+          <li><strong>密钥泄露历史：</strong>早前文档中出现过的 Tigris 密钥与默认管理员密码已被吊销 / 移除，<strong>不得</strong>再次出现。若再次发现，一律视为已泄露并立即轮换。</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<footer class="foot">
+  <div class="row">
+    <span class="two"><span class="en">Inventory Dashboard · System Documentation · maintained by rhyzo</span><span class="zh">库存仪表盘 · 系统文档 · 维护者 rhyzo</span></span>
+    <span>2026-10-14</span>
+  </div>
+</footer>
+
+<script>
+const body=document.body;
+function setLang(l){
+  body.classList.remove('lang-en','lang-zh');
+  body.classList.add('lang-'+l);
+  document.getElementById('l-en').setAttribute('aria-pressed', l==='en');
+  document.getElementById('l-zh').setAttribute('aria-pressed', l==='zh');
+  try{localStorage.setItem('invdoc-lang',l);}catch(e){}
+}
+document.getElementById('l-en').onclick=()=>setLang('en');
+document.getElementById('l-zh').onclick=()=>setLang('zh');
+try{const s=localStorage.getItem('invdoc-lang');if(s)setLang(s);}catch(e){}
+document.querySelectorAll('.copy').forEach(b=>{
+  b.onclick=()=>{navigator.clipboard.writeText(b.closest('pre').innerText).then(()=>{const t=b.textContent;b.textContent='copied';setTimeout(()=>b.textContent=t,1200);});};
+});
+</script>
+</body>
+</html>

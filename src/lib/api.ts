@@ -519,3 +519,73 @@ export const updateSettings = async (updates: Partial<AppSettings>): Promise<voi
     throw new Error(err.error || `Update settings failed: ${res.status}`)
   }
 }
+
+// ── Per-SKU summary + thresholds ───────────────────────────────────────────────
+
+/** A single lot/bin row under a SKU, ordered FEFO (index 0 = issue first). */
+export interface SkuLot {
+  id: string
+  quantity: number
+  unit: string | null
+  bin_location: string | null
+  production_date: string | null
+  expiry_date: string | null
+}
+
+/** Aggregated view across all lots of one SKU. */
+export interface SkuSummaryRow {
+  sku: string
+  name: string
+  category: string
+  unit: string
+  total_quantity: number
+  /** Optional per-SKU thresholds (null = not set) — from the `sku` table. */
+  min_threshold: number | null
+  max_threshold: number | null
+  lot_count: number
+  bin_count: number
+  soonest_expiry: string | null
+  undated_count: number
+  expiring_soon: boolean
+  is_out: boolean
+  is_low: boolean
+  lots: SkuLot[]
+}
+
+export interface SkuSummaryResponse {
+  skus: SkuSummaryRow[]
+}
+
+/** GET /api/sku — total on hand per SKU with FEFO-ordered lots + optional thresholds. */
+export const fetchInventorySummary = async (
+  search = '',
+  category = ''
+): Promise<SkuSummaryResponse> => {
+  const params = new URLSearchParams()
+  if (search) params.append('search', search)
+  if (category) params.append('category', category)
+  const res = await fetch(`${apiBase}/api/sku?${params.toString()}`, { ...CRED })
+  if (!res.ok) throw new Error(`Failed to fetch SKU summary: ${res.status}`)
+  return res.json()
+}
+
+/**
+ * PUT /api/sku — set (or clear) a SKU's optional min/max thresholds.
+ * Pass null to clear a value; editor/admin only.
+ */
+export const setSkuThresholds = async (
+  sku: string,
+  min_threshold: number | null,
+  max_threshold: number | null
+): Promise<void> => {
+  const res = await fetch(`${apiBase}/api/sku`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ sku, min_threshold, max_threshold }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Failed to save thresholds: ${res.status}`)
+  }
+}

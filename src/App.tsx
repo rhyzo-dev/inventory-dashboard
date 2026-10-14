@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { fetchAllData } from './context'
 import { useApp } from './context'
-import { removeImage } from './lib/api'
+import { removeImage, fetchInventorySummary, setSkuThresholds, type SkuSummaryRow } from './lib/api'
+import SkuSummary from './components/SkuSummary'
 import InventoryTable, { type InventoryItem } from './components/InventoryTable'
 import { StatsCards } from './components/StatsCards'
 import { Filters } from './components/Filters'
@@ -14,7 +15,7 @@ import { UploadModal } from './components/UploadModal'
 import { UserManagement, CategoryManagement, UnitsManagement } from './components/AdminPanels'
 import { SettingsModal } from './components/SettingsModal'
 import {
-  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal,
+  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal, Package, Layers,
 } from 'lucide-react'
 
 function AppContent() {
@@ -30,6 +31,11 @@ function AppContent() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // View mode: the standard item list, or the per-SKU "total on hand" view
+  const [viewMode, setViewMode] = useState<'items' | 'by-sku'>('items');
+  const [skuSkus, setSkuSkus] = useState<SkuSummaryRow[]>([]);
+  const [skuLoading, setSkuLoading] = useState(false);
 
   // Modal states
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
@@ -106,6 +112,38 @@ function AppContent() {
   useEffect(() => {
     fetchData()
   }, [filters])
+
+  // Per-SKU summary view: refetch when we're in by-sku mode or the search/category
+  // filters change (the summary honors those two). Runs alongside the items fetch.
+  const fetchSkuData = async () => {
+    setSkuLoading(true)
+    try {
+      const res = await fetchInventorySummary(filters.search, filters.category)
+      setSkuSkus(res.skus || [])
+    } catch (e: any) {
+      if (e.message?.includes('401')) {
+        const { refreshAuth } = await import('./lib/api')
+        if (await refreshAuth()) {
+          try { setSkuSkus((await fetchInventorySummary(filters.search, filters.category)).skus || []) } catch {}
+        } else {
+          doLogout()
+        }
+      }
+    } finally {
+      setSkuLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (viewMode === 'by-sku') fetchSkuData()
+  }, [viewMode, filters.search, filters.category])
+
+  // Persist a SKU's optional min/max thresholds, then refresh the summary
+  const handleThresholdsSaved = async (sku: string, min: number | null, max: number | null) => {
+    await setSkuThresholds(sku, min, max)
+    showToast('Thresholds saved')
+    fetchSkuData()
+  }
 
   // ── Handlers ─────────────────────────────────────────────────────────────
   const handleEdit = (item: InventoryItem) => {
@@ -281,32 +319,79 @@ function AppContent() {
           </div>
         ) : data ? (
           <>
+            {/* View mode toggle */}
+            <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 mb-4">
+              <button
+                onClick={() => setViewMode('items')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === 'items' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Package className="w-4 h-4" /> Items
+              </button>
+              <button
+                onClick={() => setViewMode('by-sku')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  viewMode === 'by-sku' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <Layers className="w-4 h-4" /> By SKU
+              </button>
+            </div>
+
             <StatsCards stats={data.stats} />
 
-            <div className="mt-6 space-y-4">
-              <Filters
-                filters={filters}
-                onChange={(next) => setFilters(typeof next === 'function' ? next(filters) : next)}
-                onReset={() => setFilters({ search: '', category: '', status: '', view: '', page: 1, limit: 25 })}
-                categories={categories}
-              />
-              <ExportButton filters={filters} />
-            </div>
+            {viewMode === 'by-sku' ? (
+              <>
+                <div className="mt-6">
+                  <Filters
+                    filters={filters}
+                    onChange={(next) => setFilters(typeof next === 'function' ? next(filters) : next)}
+                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', page: 1, limit: 25 })}
+                    categories={categories}
+                  />
+                </div>
+                <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  {skuLoading && skuSkus.length === 0 ? (
+                    <Loading />
+                  ) : (
+                    <SkuSummary
+                      skus={skuSkus}
+                      loading={skuLoading}
+                      canEdit={isEditor}
+                      onEditThresholds={handleThresholdsSaved}
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-6 space-y-4">
+                  <Filters
+                    filters={filters}
+                    onChange={(next) => setFilters(typeof next === 'function' ? next(filters) : next)}
+                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', page: 1, limit: 25 })}
+                    categories={categories}
+                  />
+                  <ExportButton filters={filters} />
+                </div>
 
-            <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-              <InventoryTable
-                items={data.items}
-                pagination={data.pagination}
-                onPageChange={(page) => setFilters(f => ({ ...f, page }))}
-                onLimitChange={(limit) => setFilters(f => ({ ...f, limit, page: 1 }))}
-                onEdit={isEditor ? handleEdit : undefined}
-                onDelete={isAdmin ? handleDelete : undefined}
-                onViewImage={handleViewImage}
-                onUploadImage={isEditor ? handleUploadImage : undefined}
-                onRemoveImage={isEditor ? handleRemoveImage : undefined}
-                onAdd={isEditor ? handleAdd : undefined}
-              />
-            </div>
+                <div className="mt-6 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                  <InventoryTable
+                    items={data.items}
+                    pagination={data.pagination}
+                    onPageChange={(page) => setFilters(f => ({ ...f, page }))}
+                    onLimitChange={(limit) => setFilters(f => ({ ...f, limit, page: 1 }))}
+                    onEdit={isEditor ? handleEdit : undefined}
+                    onDelete={isAdmin ? handleDelete : undefined}
+                    onViewImage={handleViewImage}
+                    onUploadImage={isEditor ? handleUploadImage : undefined}
+                    onRemoveImage={isEditor ? handleRemoveImage : undefined}
+                    onAdd={isEditor ? handleAdd : undefined}
+                  />
+                </div>
+              </>
+            )}
           </>
         ) : null}
       </main>

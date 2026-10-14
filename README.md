@@ -185,14 +185,20 @@ npx wrangler d1 execute inventory-dashboard --remote --file=migrations/NNNN_name
 
 ## Access & Credentials
 
-- **No default admin account is shipped in the repository.** The first admin user is
-  created out-of-band (a one-time seeded user or created via a trusted bootstrap), and
-  all accounts are then managed in the app's **Users** panel.
-- The initial credentials are **not** stored in this repo, the docs, or anywhere they
-  can leak. Anyone with an admin account can create further users (editor / viewer).
-- Passwords are hashed with PBKDF2-SHA256 (100k iterations, 16-byte salt) and checked
-  against a breach list (HIBP) on creation; rotation of `AUTH_SECRET` invalidates all
-  existing sessions.
+- **Default administrator (first-run / demo).** A seeded `admin` account ships with the
+  app so the project can be evaluated out of the box:
+  - Username: `admin`
+  - Password: `Admin@2024!`
+- **Rotate it.** This is a known, public credential intended for demos. After first
+  sign-in, change it via the app's **Change Password** menu (any user can change their
+  own password; the request revokes the old session's refresh token). For any real
+  deployment, do not use the shipped default: create your own admin, rotate `AUTH_SECRET`,
+  and delete the seeded account.
+- **Roles.** Admin (full control) · Editor (items, categories, units — no deletes/users) ·
+  Viewer (read-only). Admins manage further users in the **Users** panel.
+- **Passwords** are hashed with PBKDF2-SHA256 (100k iterations, 16-byte salt), validated
+  against a strength policy and a breach list (HIBP). Rotating `AUTH_SECRET` invalidates
+  all sessions.
 
 ---
 

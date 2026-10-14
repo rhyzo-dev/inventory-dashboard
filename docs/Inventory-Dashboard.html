@@ -649,21 +649,23 @@ npx wrangler pages dev dist --d1=DB --vars-file=.env   <span class="cm"># 本地
       <div class="en">
         <ul>
           <li><strong>Response headers</strong> (applied by <code>functions/_middleware.ts</code> on every response): a strict same-origin <code>Content-Security-Policy</code> (<code>default-src 'self'</code>; <code>img-src 'self' data: blob:</code> — images load only via the same-origin <code>/api/images/</code> proxy plus client-side <code>data:</code>/<code>blob:</code> compression), <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code>, <code>Permissions-Policy</code> (camera / microphone / geolocation disabled), and <code>Strict-Transport-Security</code> (1 year, includeSubDomains).</li>
-          <li><strong>Secrets</strong> are never committed, never in the docs, and never returned by the API.</li>
+          <li><strong>Secrets</strong> — operational secrets (<code>AUTH_SECRET</code>, Tigris keys) are never committed, never in the docs, and never returned by the API. The deliberate exception is the <strong>demo / first-run credential</strong> (<code>admin</code> / <code>Admin@2024!</code>), which is documented so the project can be evaluated; it is <em>not</em> an operational secret and must be rotated for any real deployment.</li>
+          <li><strong>Default credential:</strong> a seeded <code>admin</code> account ships for demo / evaluation only. It is public by design — treat it as invalid in production: change the password, set a strong <code>AUTH_SECRET</code>, and delete the account.</li>
           <li><strong>Least-privilege roles</strong> (§5); destructive actions (delete item / category / unit, user &amp; settings management) are admin-only.</li>
           <li><strong>In-use guards</strong> prevent deleting a category or unit that items still reference.</li>
           <li><strong>Rate limiting</strong> (§5.3) throttles login, inventory, and upload abuse.</li>
-          <li><strong>Cred-leak history:</strong> the Tigris keys and a default admin password that appeared in an earlier document are revoked / removed and must <strong>not</strong> reappear. If any of them surface again, treat them as compromised and rotate immediately.</li>
+          <li><strong>Cred-leak history:</strong> the Tigris keys that appeared in an earlier document are revoked and must <strong>not</strong> reappear — if a real operational secret surfaces again, treat it as compromised and rotate immediately. The seeded <code>admin</code> demo credential is a separate, deliberate value, not a leak.</li>
         </ul>
       </div>
       <div class="zh">
         <ul>
           <li><strong>响应头</strong>（由 <code>functions/_middleware.ts</code> 对每个响应统一设置）：严格的同源 <code>Content-Security-Policy</code>（<code>default-src 'self'</code>；<code>img-src 'self' data: blob:</code>——图片只经由同源的 <code>/api/images/</code> 代理、以及 <code>data:</code>/<code>blob:</code> 客户端压缩图加载）、<code>X-Frame-Options: DENY</code>、<code>X-Content-Type-Options: nosniff</code>、<code>Referrer-Policy: strict-origin-when-cross-origin</code>、<code>Permissions-Policy</code>（禁用摄像头 / 麦克风 / 地理位置）、以及 <code>Strict-Transport-Security</code>（1 年，includeSubDomains）。</li>
-          <li><strong>密钥</strong>从不提交、不写入文档、也不由 API 返回。</li>
+          <li><strong>密钥</strong> —— 运行密钥（<code>AUTH_SECRET</code>、Tigris 密钥）从不提交、不写入文档、也不由 API 返回。唯一的例外是<strong>演示 / 首启凭据</strong>（<code>admin</code> / <code>Admin@2024!</code>），它被刻意记录在文档中以便评估；它<em>不是</em>运行密钥，真实部署必须轮换。</li>
+          <li><strong>默认凭据：</strong>内置 <code>admin</code> 账号仅用于演示 / 评估。它按设计是公开的——生产环境视为无效：请改密、设置强 <code>AUTH_SECRET</code>，并删除该账号。</li>
           <li><strong>最小权限角色</strong>（§5）；破坏性操作（删除条目 / 类别 / 单位、用户与设置管理）仅 admin。</li>
           <li><strong>使用保护</strong>防止删除仍被条目引用的类别或单位。</li>
           <li><strong>限流</strong>（§5.3）抑制登录、库存、上传的滥用。</li>
-          <li><strong>密钥泄露历史：</strong>早前文档中出现过的 Tigris 密钥与默认管理员密码已被吊销 / 移除，<strong>不得</strong>再次出现。若再次发现，一律视为已泄露并立即轮换。</li>
+          <li><strong>密钥泄露历史：</strong>早前文档中出现过的 Tigris 密钥已被吊销，<strong>不得</strong>再次出现——若真实的运行密钥再次出现，一律视为已泄露并立即轮换。内置的 <code>admin</code> 演示凭据是另当别论的刻意公开值，不属于泄露。</li>
         </ul>
       </div>
     </section>

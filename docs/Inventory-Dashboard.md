@@ -32,6 +32,12 @@ facility. It supports:
   bin location, production/expiry dates, specification, and a photo
 - Image storage for item photos
 - Export to CSV or XLSX
+- A **By-SKU** view: total on hand per SKU with **FEFO** lot ordering and optional
+  per-SKU min/max thresholds
+- An attention-first list: the four stat cards double as one-click filters, and the list
+  uses a stable, user-selectable **sort** (SKU / name / quantity / FEFO / recency) so
+  newly added items land in place instead of jumping to the top
+- Self-service **change-your-own-password** (any role), revoking the old session
 - Role-based user management (admin / editor / viewer)
 - Management of reference data: **categories** and **units**
 - App-wide settings (currently the company name)
@@ -139,6 +145,7 @@ All responses are JSON. Auth endpoints set/read `httpOnly` cookies.
 | `POST` | `/api/auth/login` | public | Authenticate; set `auth_token` + `refresh_token` cookies |
 | `POST` | `/api/auth/refresh` | refresh cookie | Rotate session (renew an expired access token) |
 | `POST` | `/api/auth/logout` | required | Revoke refresh token; clear both cookies |
+| `POST` | `/api/auth/change-password` | required | Change the caller's **own** password (verify current, HIBP + strength; revokes refresh tokens) |
 | `GET` | `/api/users/me` | required | Current user |
 | `GET` | `/api/users` | admin | List users |
 | `POST` | `/api/users` | admin | Create user (HIBP + strength check) |
@@ -156,6 +163,8 @@ All responses are JSON. Auth endpoints set/read `httpOnly` cookies.
 | `POST` | `/api/inventory` | editor+ | Create item |
 | `PUT` | `/api/inventory/:id` | editor+ | Update item |
 | `DELETE` | `/api/inventory/:id` | admin | Delete item |
+| `GET` | `/api/sku` | required | Per-SKU summary (total on hand, FEFO lots, thresholds) — `?category&search&sort` |
+| `PUT` | `/api/sku` | editor+ | Upsert a SKU's optional min/max thresholds (body `{ sku, min_threshold?, max_threshold? }`) |
 | `POST` | `/api/upload` | editor+ | Upload image to Tigris (returns object key) |
 | `GET` | `/api/images/:key` | public | Proxy an image from Tigris |
 | `GET` | `/api/stats` | required | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
@@ -206,6 +215,18 @@ Date, Current Quantity* — the quantity cell is color-coded by stock status.
 | Manage users | ✅ | ❌ | ❌ |
 | Manage settings | ✅ | ❌ | ❌ |
 
+### 5.5 Initial access / default administrator
+- A seeded **`admin`** account ships with the app as a first-run / demo credential so the
+  project can be evaluated out of the box:
+  - Username: `admin`
+  - Password: `Admin@2024!`
+- This is a **known, public** credential. It is intended for demos and evaluation, **not**
+  for production. For a real deployment:
+  1. Sign in as `admin` and immediately change the password via **Change Password**
+     (see §6.9), or reset it in the **Users** panel.
+  2. Set a strong, unique `AUTH_SECRET` (rotating it invalidates all sessions — §7.4).
+  3. Delete the seeded `admin` account and work from your own admin user.
+
 ## 6. User Flows
 
 ### 6.1 Loading the app
@@ -220,16 +241,33 @@ uniform "Invalid username or password" (no user enumeration).
 
 ### 6.3 Dashboard
 Top of the page shows four **stat cards** (Total, Low Stock, Out of Stock, Expiring
-Soon), a **Filters** row (search, category, status, view + Reset), an **Export** button
-(CSV / XLSX of the current filter), and the **inventory table** with pagination
-(10 / 25 / 50 / 100 per page). The quantity cell shows the value plus its unit
-(e.g. `12 L`).
+Soon), a **Filters** row, an **Export** button (CSV / XLSX of the current filter), and
+the **inventory table** with pagination (10 / 25 / 50 / 100 per page). The quantity cell
+shows the value plus its unit (e.g. `12 L`).
+
+- **View toggle** (`Items` / `By SKU`): *By SKU* collapses lots into one row per SKU —
+  total on hand, **FEFO** issue order across bins/lots, and the SKU's optional min/max
+  thresholds (edit via the row's *Thresholds* button, §6.4b).
+- **Stat cards are filters.** Clicking *Low Stock* / *Out of Stock* / *Expiring Soon*
+  applies the matching server-side filter and a sensible sort (quantity-ascending for
+  stock, FEFO for expiry); clicking again clears it.
+- **Filters** row: search, category, status, view, and a **Sort** control
+  (SKU / name / quantity / FEFO / recently updated / recently added). The default sort is
+  **SKU**, so the list is a stable catalog — a newly added item appears in its own place
+  instead of jumping to the top, then **flashes** once so it is easy to find.
 
 ### 6.4 Item edit / add
 The **Add Item** / pencil button opens the **Edit modal**: SKU (locked on edit), Name,
 Category (managed list), **Unit** (managed list, with a `(legacy)` option for values not
 in the list), quantity + min/max thresholds, bin location, production/expiry dates,
 specification, description, and image preview (remove via the 🗑 button).
+
+### 6.4b Per-SKU thresholds (By-SKU view)
+In the *By SKU* view, each row's **Thresholds** button opens a small editor for that SKU's
+optional **min / max** stock levels (stored in the `sku` table, not on the item rows).
+Leave a field blank to clear it; `max` must be ≥ `min`. This is intended for the
+fast-moving production items — a SKU with no thresholds simply shows "—" and no
+low/out flags.
 
 ### 6.5 Images
 Editors can **upload** (camera icon), **view** (click thumbnail → lightbox), or
@@ -249,6 +287,16 @@ Editors can **upload** (camera icon), **view** (click thumbnail → lightbox), o
 If a data request returns **401**, the app first tries `POST /api/auth/refresh`
 (using the refresh cookie) and retries; only if that also fails does it force a logout
 to the login page. This keeps long sessions alive within the 7-day refresh window.
+
+### 6.9 Change your own password
+Any user (admin, editor, viewer) can change their **own** password from the account
+menu → **Change Password**. The server (`POST /api/auth/change-password`):
+1. Verifies the current password (constant-time PBKDF2 compare) — the first step for a
+   lone admin to lock out the shipped default credential.
+2. Rejects an unchanged password and enforces the §5.2 policy + HIBP breach check.
+3. Rehashes and stores the new password, then **deletes that user's refresh tokens**, so
+   the old credential can no longer mint a session. The current access token stays valid
+   until it lapses, so the user is not logged out mid-page.
 
 ## 7. Operations
 
@@ -270,7 +318,8 @@ Apply each file to remote D1 **in numeric order** (idempotent-ish; run once):
 npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_units.sql
 ```
 There is no auto-runner. Migrations: `0001` initial schema, `0002` auth tables, `0003`
-app_settings, `0004` remove SKU uniqueness, `0005` units.
+app_settings, `0004` remove SKU uniqueness, `0005` units, `0006` per-SKU thresholds
+(the `sku` table backing the By-SKU view's optional min/max levels).
 
 ### 7.4 Secrets management
 `AUTH_SECRET`, `TIGRIS_ACCESS_KEY_ID`, `TIGRIS_SECRET_ACCESS_KEY` live in Cloudflare
@@ -291,15 +340,23 @@ All services run within Cloudflare / Tigris free tiers for light internal use �
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy` (camera / microphone / geolocation disabled), and
   `Strict-Transport-Security` (1 year, includeSubDomains).
-- **Secrets** are never committed, never in the docs, and never returned by the API.
+- **Secrets** — operational secrets (`AUTH_SECRET`, Tigris keys) are never committed,
+  never in the docs, and never returned by the API. The exception is the **demo/first-run
+  credential** (`admin` / `Admin@2024!`), which is deliberately documented (§5.5) so the
+  project can be evaluated; it is *not* an operational secret and must be rotated for any
+  real deployment.
 - **Password** handling and **breach checking** per §5.2.
 - **Least-privilege roles** per §5.4; destructive actions (delete item/category/unit,
   user & settings management) are admin-only.
 - **In-use guards** prevent deleting a category or unit that items still reference.
 - **Rate limiting** per §5.3 throttles login, inventory, and upload abuse.
-- **Cred-leak history:** the Tigris keys and a default admin password that appeared in
-  an earlier document are revoked/removed; they must **not** reappear. If any of them
-  surface again, treat them as compromised and rotate immediately.
+- **Default credential:** a seeded `admin` account is shipped for demo/evaluation only
+  (§5.5). It is public by design; treat it as invalid in production — rotate the password,
+  set a strong `AUTH_SECRET`, and remove the account.
+- **Cred-leak history:** the Tigris keys that appeared in an earlier document are revoked
+  and must **not** reappear — if a real secret surfaces again, treat it as compromised and
+  rotate immediately. The seeded `admin` demo credential is a separate, deliberate value
+  (§5.5), not a leak.
 
 ---
 
@@ -314,6 +371,12 @@ All services run within Cloudflare / Tigris free tiers for light internal use �
 - 新增 / 编辑条目：SKU、数量、阈值、类别、**计量单位**、货位、生产/到期日期、规格、照片
 - 条目图片的存储
 - 导出 CSV 或 XLSX
+- **按 SKU** 视图：每个 SKU 的现有总量，批次按 **FEFO**（先到期先出）排序，并可选
+  每个 SKU 的最小/最大库存阈值
+- 以"需关注"为先的列表：四张统计卡片可一键过滤，列表采用可自定义的**排序**
+  （SKU / 名称 / 数量 / FEFO / 最近变更），新加入的条目落到自己位置而不是跳到最上方，
+  并短暂**高亮**一次以便定位
+- 自助**修改本人密码**（各角色均可），并撤销旧会话
 - 基于角色的用户管理（管理员 / 编辑 / 查看）
 - 参考数据管理：**类别** 与 **单位**
 - 应用级设置（目前为：公司名称）
@@ -413,6 +476,7 @@ HTML/JS/CSS 静态资源
 | `POST` | `/api/auth/login` | 公开 | 登录；写入 `auth_token` + `refresh_token` Cookie |
 | `POST` | `/api/auth/refresh` | refresh Cookie | 轮转会话（刷新过期的访问令牌） |
 | `POST` | `/api/auth/logout` | 需登录 | 吊销 refresh 令牌；清除两个 Cookie |
+| `POST` | `/api/auth/change-password` | 需登录 | 修改**本人**密码（校验旧密码、HIBP + 强度；撤销 refresh 令牌） |
 | `GET` | `/api/users/me` | 需登录 | 当前用户 |
 | `GET` | `/api/users` | admin | 用户列表 |
 | `POST` | `/api/users` | admin | 新建用户（HIBP + 强度校验） |
@@ -430,6 +494,8 @@ HTML/JS/CSS 静态资源
 | `POST` | `/api/inventory` | editor+ | 新建条目 |
 | `PUT` | `/api/inventory/:id` | editor+ | 更新条目 |
 | `DELETE` | `/api/inventory/:id` | admin | 删除条目 |
+| `GET` | `/api/sku` | 需登录 | 按 SKU 汇总（现有总量、FEFO 批次、阈值）——`?category&search&sort` |
+| `PUT` | `/api/sku` | editor+ | 更新某 SKU 的可选最小/最大阈值（请求体 `{ sku, min_threshold?, max_threshold? }`） |
 | `POST` | `/api/upload` | editor+ | 上传图片到 Tigris（返回对象 key） |
 | `GET` | `/api/images/:key` | 公开 | 从 Tigris 代理返回图片 |
 | `GET` | `/api/stats` | 需登录 | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
@@ -477,6 +543,15 @@ HTML/JS/CSS 静态资源
 | 管理用户 | ✅ | ❌ | ❌ |
 | 管理设置 | ✅ | ❌ | ❌ |
 
+### 5.5 初始访问 / 默认管理员
+- 应用内置一个 **`admin`** 账号作为首启 / 演示凭据，便于开箱即用地评估本项目：
+  - 用户名：`admin`
+  - 密码：`Admin@2024!`
+- 这是**已知、公开**的凭据，仅供演示与评估，**不**用于生产环境。真实部署请：
+  1. 以 `admin` 登录后立即通过**修改密码**（见 §6.9）改密，或在**用户**面板中重置；
+  2. 设置强且唯一的 `AUTH_SECRET`（轮换会使所有会话失效——见 §7.4）；
+  3. 删除该内置 `admin` 账号，改用自建的管理员账号。
+
 ## 6. 用户流程
 
 ### 6.1 加载应用
@@ -489,14 +564,28 @@ HTML/JS/CSS 静态资源
 进入仪表盘。用户名或密码错误时统一返回 "Invalid username or password"（不泄露账号是否存在）。
 
 ### 6.3 仪表盘
-页面顶部为四张**统计卡**（总数、低库存、缺货、即将到期），**筛选**行（搜索、类别、
-状态、视图 + 重置），**导出**按钮（按当前筛选导出 CSV / XLSX），以及带分页的**库存表格**
-（每页 10 / 25 / 50 / 100）。数量列显示数值加单位（例如 `12 L`）。
+页面顶部为四张**统计卡**（总数、低库存、缺货、即将到期）、**筛选**行、**导出**按钮
+（按当前筛选导出 CSV / XLSX），以及带分页的**库存表格**（每页 10 / 25 / 50 / 100）。
+数量列显示数值加单位（例如 `12 L`）。
+
+- **视图切换**（`条目` / `按 SKU`）：*按 SKU* 把批次合并为每个 SKU 一行——现有总量、
+  跨货位/批次的 **FEFO** 出库顺序，以及该 SKU 的可选最小/最大阈值（通过该行的
+  *阈值* 按钮编辑，见 §6.4b）。
+- **统计卡即过滤器**：点击*低库存 / 缺货 / 即将到期*会应用对应的服务端筛选并匹配一种
+  合理排序（库存类按数量升序，到期类按 FEFO）；再次点击则清除。
+- **筛选**行：搜索、类别、状态、视图，以及一个**排序**控件（SKU / 名称 / 数量 / FEFO /
+  最近更新 / 最近新增）。默认排序为 **SKU**，使列表成为稳定的目录——新加入的条目落到
+  自己的位置而不是跳到最上方，并**高亮**一次以便定位。
 
 ### 6.4 编辑 / 新增条目
 **Add Item** / 铅笔按钮打开**编辑弹窗**：SKU（编辑时锁定）、名称、类别（受管列表）、
 **单位**（受管列表，对不在列表中的旧值提供 `(legacy)` 选项）、数量与最小/最大阈值、货位、
 生产/到期日期、规格、描述，以及图片预览（可点 🗑 移除）。
+
+### 6.4b 按 SKU 阈值（按 SKU 视图）
+在*按 SKU*视图中，每行的**阈值**按钮打开该 SKU 的可选**最小 / 最大**库存设置（存于
+`sku` 表，而非条目行上）。留空即清除；`max` 必须 ≥ `min`。这些阈值面向快动生产物料；
+未设阈值的 SKU 显示"—"，也不会有低/缺库存标记。
 
 ### 6.5 图片
 编辑者可以**上传**（相机图标）、**查看**（点击缩略图 → 灯箱）、**移除**条目照片。
@@ -514,6 +603,14 @@ HTML/JS/CSS 静态资源
 ### 6.8 静默刷新
 若某数据请求返回 **401**，应用先尝试 `POST /api/auth/refresh`（用 refresh Cookie）
 并重试；只有它也失败时，才强制登出回到登录页。这让 7 天刷新窗口内的长会话保持有效。
+
+### 6.9 修改本人密码
+任何用户（管理员 / 编辑 / 查看）都可从账号菜单 → **修改密码** 更改**本人**密码。
+服务端（`POST /api/auth/change-password`）：
+1. 校验当前密码（定长 PBKDF2 比对）——这是唯一管理员把内置默认凭据"锁掉"的第一步。
+2. 拒绝沿用旧密码，并执行 §5.2 的强度策略 + HIBP 泄露校验。
+3. 重新哈希并存储新密码，随后**删除该用户的刷新令牌**，使旧凭据无法再开通会话；
+   当前访问令牌在到期前仍有效，因此不会把用户当场登出。
 
 ## 7. 运维
 
@@ -535,7 +632,8 @@ npm run deploy
 npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_units.sql
 ```
 没有自动运行器。迁移：`0001` 初始结构、`0002` 鉴权表、`0003` app_settings、
-`0004` 取消 SKU 唯一、`0005` 单位。
+`0004` 取消 SKU 唯一、`0005` 单位、`0006` 按 SKU 阈值（`sku` 表，支撑"按 SKU"视图的
+可选最小/最大库存）。
 
 ### 7.4 密钥管理
 `AUTH_SECRET`、`TIGRIS_ACCESS_KEY_ID`、`TIGRIS_SECRET_ACCESS_KEY` 存放在 Cloudflare
@@ -554,10 +652,15 @@ npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_unit
   `X-Content-Type-Options: nosniff`，`Referrer-Policy: strict-origin-when-cross-origin`，
   `Permissions-Policy`（禁用摄像头 / 麦克风 / 地理位置），以及
   `Strict-Transport-Security`（1 年，includeSubDomains）。
-- **密钥** 从不提交、不写入文档、也不由 API 返回。
+- **密钥** —— 运行密钥（`AUTH_SECRET`、Tigris 密钥）从不提交、不写入文档、也不由 API 返回。
+  唯一的例外是**演示 / 首启凭据**（`admin` / `Admin@2024!`），它是被刻意记录在文档中
+  （§5.5）以便评估本项目的；它**不是**运行密钥，真实部署必须轮换。
 - **密码** 处理与**泄露校验** 见 §5.2。
 - **最小权限角色** 见 §5.4；破坏性操作（删除条目/类别/单位、用户与设置管理）仅 admin。
 - **使用保护** 防止删除仍被条目引用的类别或单位。
 - **限流** 见 §5.3，抑制登录、库存、上传的滥用。
-- **密钥泄露历史：** 早前文档中出现过的 Tigris 密钥与默认管理员密码已被吊销/移除；
-  它们**不得**再次出现。若再次发现这些值，一律视为已泄露并立即轮换。
+- **默认凭据：** 内置 `admin` 账号仅用于演示 / 评估（§5.5）。它按设计是公开的；生产环境
+  视为无效——请改密、设置强 `AUTH_SECRET`，并删除该账号。
+- **密钥泄露历史：** 早前文档中出现过的 Tigris 密钥已被吊销，**不得**再次出现——若真实的
+  运行密钥再次出现，一律视为已泄露并立即轮换。内置的 `admin` 演示凭据（§5.5）另当别论，
+  是刻意公开的值，不属于泄露。

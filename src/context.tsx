@@ -126,10 +126,11 @@ export async function fetchAllData(
   status: string,
   view: string,
   page: number,
-  limit: number
+  limit: number,
+  sort = 'sku'
 ) {
   const [invRes, statsRes] = await Promise.all([
-    fetchInventory(search, category, status, view, page, limit),
+    fetchInventory(search, category, status, view, page, limit, sort),
     fetchStats(),
   ])
   // Normalize all Tigris direct URLs to proxy URLs for consistent image access

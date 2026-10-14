@@ -106,37 +106,57 @@ export const onRequestGet: PagesFunction = async (context) => {
     const url = new URL(request.url)
     const category = url.searchParams.get('category')
     const search = url.searchParams.get('search')
+    const status = url.searchParams.get('status') || ''
+    const view = url.searchParams.get('view') || ''
+    const sort = url.searchParams.get('sort') || 'sku'
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'))
     const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '25')))
 
-    let query = 'SELECT * FROM consumable_item WHERE 1=1'
-    const params: unknown[] = []
+    // Shared WHERE clause so the row list and the pagination count always agree.
+    // (status/view previously had no effect server-side — now they do.)
+    const where: string[] = ['1=1']
+    const whereParams: unknown[] = []
 
     if (category) {
-      query += ' AND category = ?'
-      params.push(sanitize(category))
+      where.push('category = ?')
+      whereParams.push(sanitize(category))
     }
     if (search) {
-      query += ' AND (name LIKE ? OR sku LIKE ? OR description LIKE ?)'
+      where.push('(name LIKE ? OR sku LIKE ? OR description LIKE ?)')
       const like = `%${search}%`
-      params.push(like, like, like)
+      whereParams.push(like, like, like)
     }
+    if (status === 'low_stock' || view === 'low-stock') {
+      where.push('quantity > 0 AND min_threshold > 0 AND quantity < min_threshold')
+    } else if (status === 'out_of_stock') {
+      where.push('quantity <= 0')
+    } else if (status === 'adequate') {
+      where.push('quantity > 0 AND quantity >= min_threshold')
+    }
+    if (view === 'expiring') {
+      where.push("expiry_date IS NOT NULL AND expiry_date != '' AND expiry_date <= date('now', '+30 days')")
+    }
+    const whereClause = where.join(' AND ')
+
+    // Stable, intent-aware ordering. Default is SKU so the list is a catalog, not a feed.
+    const orderMap: Record<string, string> = {
+      'name': 'name ASC',
+      'qty-asc': 'quantity ASC',
+      'qty-desc': 'quantity DESC',
+      'expiry': "(expiry_date IS NULL OR expiry_date = '') DESC, expiry_date ASC, production_date ASC",
+      'recent': 'updated_at DESC',
+      'created': 'created_at DESC',
+    }
+    const orderBy = orderMap[sort] || 'sku ASC'
 
     // Count total matching rows for pagination
-    let countSql = `SELECT COUNT(*) as cnt FROM consumable_item WHERE 1=1`
-    const countParams: unknown[] = []
-    if (category) { countSql += ' AND category = ?'; countParams.push(sanitize(category)) }
-    if (search) {
-      countSql += ' AND (name LIKE ? OR sku LIKE ? OR description LIKE ?)'
-      const like = `%${search}%`
-      countParams.push(like, like, like)
-    }
-    const countResult = await env.DB.prepare(countSql).bind(...countParams).first<{ cnt: number }>()
+    const countSql = `SELECT COUNT(*) as cnt FROM consumable_item WHERE ${whereClause}`
+    const countResult = await env.DB.prepare(countSql).bind(...whereParams).first<{ cnt: number }>()
     const total = countResult?.cnt ?? 0
     const totalPages = Math.max(1, Math.ceil(total / limit))
 
-    query += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?'
-    const stmt = env.DB.prepare(query).bind(...params, limit, (page - 1) * limit)
+    const query = `SELECT * FROM consumable_item WHERE ${whereClause} ORDER BY ${orderBy} LIMIT ? OFFSET ?`
+    const stmt = env.DB.prepare(query).bind(...whereParams, limit, (page - 1) * limit)
     const result = await stmt.all()
     const items = result.results as Array<Record<string, unknown>>
 

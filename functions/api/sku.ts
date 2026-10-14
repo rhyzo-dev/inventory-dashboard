@@ -87,6 +87,7 @@ export const onRequestGet: PagesFunction = async (context) => {
     const url = new URL(request.url)
     const category = url.searchParams.get('category')
     const search = url.searchParams.get('search')
+    const sort = url.searchParams.get('sort') || 'sku'
 
     // Shared WHERE clause for the item-driven queries (same filters as /api/inventory)
     const where: string[] = ['1=1']
@@ -101,6 +102,16 @@ export const onRequestGet: PagesFunction = async (context) => {
       whereParams.push(like, like, like)
     }
     const whereClause = where.join(' AND ')
+
+    // Optional reordering of the SKU rows themselves. The per-SKU lots below stay
+    // FEFO-ordered and grouped by SKU regardless — only the summary-row order moves.
+    const skuOrder: Record<string, string> = {
+      'name': 'name ASC',
+      'qty-asc': 'total_quantity ASC',
+      'qty-desc': 'total_quantity DESC',
+      'expiry': "(soonest_expiry IS NULL OR soonest_expiry = '') ASC, soonest_expiry ASC",
+    }
+    const skuOrderBy = skuOrder[sort] || 'sku ASC'
 
     // 1) Per-SKU aggregate totals (grouped; FEFO-safe stats: soonest expiry, undated lots)
     const aggResult = await env.DB.prepare(`
@@ -120,7 +131,7 @@ export const onRequestGet: PagesFunction = async (context) => {
       FROM consumable_item ci
       WHERE ${whereClause}
       GROUP BY ci.sku
-      ORDER BY ci.sku ASC
+      ORDER BY ${skuOrderBy}
     `).bind(...whereParams).all()
     const rows = aggResult.results as unknown as Array<Record<string, unknown>>
 

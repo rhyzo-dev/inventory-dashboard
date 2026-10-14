@@ -135,6 +135,24 @@ export const refreshAuth = async (): Promise<boolean> => {
   return res.ok
 }
 
+/**
+ * Self-service password change. Any user can change their own password.
+ * The old refresh tokens are revoked server-side; the current session stays
+ * valid until its access token expires, after which the new password is required.
+ */
+export const changePassword = async (current_password: string, new_password: string): Promise<void> => {
+  const res = await fetch(`${apiBase}/api/auth/change-password`, {
+    method: 'POST',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ current_password, new_password }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Password change failed: ${res.status}`)
+  }
+}
+
 // ── Inventory ──────────────────────────────────────────────────────────────────
 
 export const fetchInventory = async (
@@ -143,7 +161,8 @@ export const fetchInventory = async (
   status = '',
   view = '',
   page = 1,
-  limit = 25
+  limit = 25,
+  sort = 'sku'
 ): Promise<InventoryResponse> => {
   const params = new URLSearchParams()
   if (search) params.append('search', search)
@@ -152,6 +171,7 @@ export const fetchInventory = async (
   if (view) params.append('view', view)
   params.append('page', String(page))
   params.append('limit', String(limit))
+  if (sort) params.append('sort', sort)
 
   const res = await fetch(`${apiBase}/api/inventory?${params.toString()}`, {
     headers: getHeaders(),
@@ -559,11 +579,13 @@ export interface SkuSummaryResponse {
 /** GET /api/sku — total on hand per SKU with FEFO-ordered lots + optional thresholds. */
 export const fetchInventorySummary = async (
   search = '',
-  category = ''
+  category = '',
+  sort = ''
 ): Promise<SkuSummaryResponse> => {
   const params = new URLSearchParams()
   if (search) params.append('search', search)
   if (category) params.append('category', category)
+  if (sort) params.append('sort', sort)
   const res = await fetch(`${apiBase}/api/sku?${params.toString()}`, { ...CRED })
   if (!res.ok) throw new Error(`Failed to fetch SKU summary: ${res.status}`)
   return res.json()

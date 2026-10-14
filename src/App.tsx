@@ -4,7 +4,7 @@ import { useApp } from './context'
 import { removeImage, fetchInventorySummary, setSkuThresholds, type SkuSummaryRow } from './lib/api'
 import SkuSummary from './components/SkuSummary'
 import InventoryTable, { type InventoryItem } from './components/InventoryTable'
-import { StatsCards } from './components/StatsCards'
+import { StatsCards, type StatKey } from './components/StatsCards'
 import { Filters } from './components/Filters'
 import { ExportButton } from './components/ExportButton'
 import { Loading } from './components/Loading'
@@ -14,9 +14,19 @@ import { ImageViewer } from './components/ImageViewer'
 import { UploadModal } from './components/UploadModal'
 import { UserManagement, CategoryManagement, UnitsManagement } from './components/AdminPanels'
 import { SettingsModal } from './components/SettingsModal'
+import ChangePasswordModal from './components/ChangePasswordModal'
 import {
-  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal, Package, Layers,
+  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal, Package, Layers, KeyRound,
 } from 'lucide-react'
+
+/** One-click attention filters: a stat card drives status/view + a matching sort,
+ *  so the list that appears is already ordered the way that concern wants. */
+const STAT_KEY_FILTERS: Record<StatKey, { status: string; view: string; sort: string }> = {
+  all:      { status: '', view: '', sort: 'sku' },
+  low:      { status: 'low_stock', view: '', sort: 'qty-asc' },
+  out:      { status: 'out_of_stock', view: '', sort: 'qty-asc' },
+  expiring: { status: '', view: 'expiring', sort: 'expiry' },
+}
 
 function AppContent() {
   const { user, categories, units, settings, doLogout, refreshCategories, refreshUnits, refreshSettings } = useApp();
@@ -25,12 +35,17 @@ function AppContent() {
     category: '',
     status: '',
     view: '',
+    sort: 'sku',
     page: 1,
     limit: 25,
   });
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // The id of a row to flash once, right after an add/edit. Cleared by a timer.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // View mode: the standard item list, or the per-SKU "total on hand" view
   const [viewMode, setViewMode] = useState<'items' | 'by-sku'>('items');
@@ -52,6 +67,7 @@ function AppContent() {
   const [showCategories, setShowCategories] = useState(false);
   const [showUnits, setShowUnits] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +87,25 @@ function AppContent() {
   const canManageUsers = isAdmin
   const canManageCategories = isEditor
 
+  // Which stat card reflects the current filter state (drives highlight + toggle-off).
+  const activeStat: StatKey | '' =
+    filters.view === 'expiring' ? 'expiring'
+    : filters.status === 'low_stock' ? 'low'
+    : filters.status === 'out_of_stock' ? 'out'
+    : (filters.status === '' && filters.view === '') ? 'all'
+    : ''
+
+  // Click a card → apply that attention filter to the Items list (switching to it),
+  // or clear it when clicking the already-active card / Total Items.
+  const handleStatSelect = (key: StatKey) => {
+    const target = key !== 'all' && key === activeStat ? STAT_KEY_FILTERS.all : STAT_KEY_FILTERS[key]
+    setFilters((f) => ({ ...f, ...target, page: 1 }))
+    if (key !== 'all') setViewMode('items')
+  }
+
+  // Clear any pending flash timer on unmount
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current) }, [])
+
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -80,7 +115,7 @@ function AppContent() {
     setLoading(true)
     setError(null)
     try {
-      const result = await fetchAllData(filters.search, filters.category, filters.status, filters.view, filters.page, filters.limit)
+      const result = await fetchAllData(filters.search, filters.category, filters.status, filters.view, filters.page, filters.limit, filters.sort)
       setData(result)
     } catch (e: any) {
       if (e.message?.includes('401') || e.message?.includes('Authentication')) {
@@ -90,7 +125,7 @@ function AppContent() {
         if (renewed) {
           setLoading(true)
           try {
-            const result = await fetchAllData(filters.search, filters.category, filters.status, filters.view, filters.page, filters.limit)
+            const result = await fetchAllData(filters.search, filters.category, filters.status, filters.view, filters.page, filters.limit, filters.sort)
             setData(result)
             setLoading(false)
             return
@@ -113,18 +148,18 @@ function AppContent() {
     fetchData()
   }, [filters])
 
-  // Per-SKU summary view: refetch when we're in by-sku mode or the search/category
-  // filters change (the summary honors those two). Runs alongside the items fetch.
+  // Per-SKU summary view: refetch when we're in by-sku mode or the search/category/sort
+  // filters change (the summary honors those). Runs alongside the items fetch.
   const fetchSkuData = async () => {
     setSkuLoading(true)
     try {
-      const res = await fetchInventorySummary(filters.search, filters.category)
+      const res = await fetchInventorySummary(filters.search, filters.category, filters.sort)
       setSkuSkus(res.skus || [])
     } catch (e: any) {
       if (e.message?.includes('401')) {
         const { refreshAuth } = await import('./lib/api')
         if (await refreshAuth()) {
-          try { setSkuSkus((await fetchInventorySummary(filters.search, filters.category)).skus || []) } catch {}
+          try { setSkuSkus((await fetchInventorySummary(filters.search, filters.category, filters.sort)).skus || []) } catch {}
         } else {
           doLogout()
         }
@@ -136,7 +171,7 @@ function AppContent() {
 
   useEffect(() => {
     if (viewMode === 'by-sku') fetchSkuData()
-  }, [viewMode, filters.search, filters.category])
+  }, [viewMode, filters.search, filters.category, filters.sort])
 
   // Persist a SKU's optional min/max thresholds, then refresh the summary
   const handleThresholdsSaved = async (sku: string, min: number | null, max: number | null) => {
@@ -154,8 +189,14 @@ function AppContent() {
     setEditItem(null); setIsEditOpen(true)
   }
 
-  const handleEditSuccess = () => {
+  const handleEditSuccess = (id?: string) => {
     showToast('Item saved successfully')
+    if (id) {
+      // Flash the freshly-saved row so it's findable in a stable (SKU-ordered) list.
+      setFlashId(id)
+      if (flashTimer.current) clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlashId(null), 2500)
+    }
     fetchData()
   }
 
@@ -296,6 +337,13 @@ function AppContent() {
                     <p className="text-xs text-gray-500 capitalize">{user.role}</p>
                   </div>
                   <button
+                    onClick={() => { setUserMenuOpen(false); setShowChangePassword(true) }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    Change Password
+                  </button>
+                  <button
                     onClick={() => { setUserMenuOpen(false); doLogout() }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                   >
@@ -339,7 +387,7 @@ function AppContent() {
               </button>
             </div>
 
-            <StatsCards stats={data.stats} />
+            <StatsCards stats={data.stats} onSelect={handleStatSelect} active={activeStat === '' ? undefined : activeStat} />
 
             {viewMode === 'by-sku' ? (
               <>
@@ -347,7 +395,7 @@ function AppContent() {
                   <Filters
                     filters={filters}
                     onChange={(next) => setFilters(typeof next === 'function' ? next(filters) : next)}
-                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', page: 1, limit: 25 })}
+                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', sort: 'sku', page: 1, limit: 25 })}
                     categories={categories}
                   />
                 </div>
@@ -370,7 +418,7 @@ function AppContent() {
                   <Filters
                     filters={filters}
                     onChange={(next) => setFilters(typeof next === 'function' ? next(filters) : next)}
-                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', page: 1, limit: 25 })}
+                    onReset={() => setFilters({ search: '', category: '', status: '', view: '', sort: 'sku', page: 1, limit: 25 })}
                     categories={categories}
                   />
                   <ExportButton filters={filters} />
@@ -388,6 +436,7 @@ function AppContent() {
                     onUploadImage={isEditor ? handleUploadImage : undefined}
                     onRemoveImage={isEditor ? handleRemoveImage : undefined}
                     onAdd={isEditor ? handleAdd : undefined}
+                    flashId={flashId}
                   />
                 </div>
               </>
@@ -480,6 +529,13 @@ function AppContent() {
           onError={(msg) => showToast(msg, 'error')}
         />
       )}
+
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onSuccess={() => showToast('Password changed successfully')}
+        onError={(msg) => showToast(msg, 'error')}
+      />
     </div>
   )
 }

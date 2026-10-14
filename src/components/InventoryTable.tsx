@@ -39,6 +39,8 @@ interface InventoryTableProps {
   onUploadImage: (item: InventoryItem) => void;
   onRemoveImage: (item: InventoryItem) => void;
   onAdd: () => void;
+  /** id of a row to highlight once (right after add/edit). Cleared by the parent. */
+  flashId?: string | null;
 }
 
 const getStatus = (quantity: number, minThreshold: number): { label: string; color: 'green' | 'yellow' | 'red' } => {
@@ -64,6 +66,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   onUploadImage,
   onRemoveImage,
   onAdd,
+  flashId,
 }) => {
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
 
@@ -119,7 +122,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             return (
               <tr
                 key={item.id}
-                className="hover:bg-gray-50 transition-colors"
+                className={`hover:bg-gray-50 transition-colors ${flashId === item.id ? 'row-flash' : ''}`}
                 onMouseEnter={() => setHoveredItemId(item.id)}
                 onMouseLeave={() => setHoveredItemId(null)}
               >

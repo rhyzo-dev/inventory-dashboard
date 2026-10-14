@@ -6,7 +6,8 @@ interface EditModalProps {
   isOpen: boolean
   onClose: () => void
   item?: any
-  onSuccess: () => void
+  /** Called after a successful save with the item's id, so the list can flash it. */
+  onSuccess: (id?: string) => void
   onError: (msg: string) => void
   categories?: { name: string; color: string }[]
   units?: { id: string; name: string }[]
@@ -100,6 +101,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
     e.preventDefault()
     if (!validate()) return
     setSaving(true)
+    let savedId: string | undefined
     try {
       if (isEdit) {
         const updateData: UpdateItemInput = {
@@ -119,6 +121,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           image_url: imagePreview,
         }
         await updateItem(item.id, updateData)
+        savedId = item.id
       } else {
         const createData: CreateItemInput = {
           sku: form.sku.trim(),
@@ -135,9 +138,10 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           specification: form.specification || undefined,
           image_url: imagePreview || undefined,
         }
-        await createItem(createData)
+        const res = await createItem(createData)
+        savedId = res.id
       }
-      onSuccess()
+      onSuccess(savedId)
       onClose()
     } catch (err: any) {
       onError(err.message || 'Save failed')

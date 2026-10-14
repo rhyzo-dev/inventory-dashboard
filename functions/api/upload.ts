@@ -117,7 +117,8 @@ export const onRequestPost: PagesFunction = async (context) => {
       Key: objectKey,
       Body: uint8Array,
       ContentType: file.type,
-      ACL: 'public-read',
+      // NOTE: no ACL — Tigris does not support S3 object ACLs (public-read is
+      // rejected). Objects are served through the /api/images/ proxy instead.
     }))
 
     // Use proxy URL so images are served through our API (bypasses Tigris public access restrictions)
@@ -136,8 +137,12 @@ export const onRequestPost: PagesFunction = async (context) => {
       itemId,
       message: itemId ? 'Image uploaded and attached to item' : 'Image uploaded successfully'
     }), { status: 200, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } })
-  } catch (error) {
-    console.error('Upload error:', error)
+  } catch (error: any) {
+    // Log enough to diagnose Tigris/credential issues without leaking details to the client
+    console.error('Upload error:', error?.name || error,
+      '| httpStatus:', error?.$metadata?.httpStatus,
+      '| code:', error?.code,
+      '|', error?.message?.slice(0, 200))
     return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: SECURITY_HEADERS })
   }
 }

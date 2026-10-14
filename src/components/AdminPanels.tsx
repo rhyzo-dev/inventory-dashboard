@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Edit3, Trash2, X, Check, Shield, UserPlus, Users, Tag } from 'lucide-react'
+import { Plus, Edit3, Trash2, X, Check, Shield, UserPlus, Users, Tag, Ruler } from 'lucide-react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,12 @@ interface Category {
   created_at: string
 }
 
+interface Unit {
+  id: string
+  name: string
+  created_at: string
+}
+
 interface UserModalProps {
   isOpen: boolean
   onClose: () => void
@@ -36,6 +42,14 @@ interface CategoryModalProps {
   isOpen: boolean
   onClose: () => void
   category?: Category | null
+  onSuccess: () => void
+  onError: (msg: string) => void
+}
+
+interface UnitModalProps {
+  isOpen: boolean
+  onClose: () => void
+  unit?: Unit | null
   onSuccess: () => void
   onError: (msg: string) => void
 }
@@ -622,6 +636,207 @@ export function CategoryManagement({ isOpen, onClose, onCategoryChange, onError,
         onClose={() => setCreateModal(false)}
         category={editCategory}
         onSuccess={() => { loadCategories(); onCategoryChange() }}
+        onError={onError}
+      />
+    </>
+  )
+}
+
+// ── UnitModal ──────────────────────────────────────────────────────────────────
+
+export function UnitModal({ isOpen, onClose, unit, onSuccess, onError }: UnitModalProps) {
+  const isEdit = !!unit
+  const [name, setName] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setName(unit?.name || '')
+    setError('')
+  }, [unit, isOpen])
+
+  const validate = (): boolean => {
+    const trimmed = name.trim()
+    if (!trimmed) { setError('Unit name is required'); return false }
+    if (trimmed.length > 20) { setError('Maximum 20 characters'); return false }
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validate()) return
+    setSaving(true)
+    setError('')
+    try {
+      const url = isEdit ? `/api/units/${unit!.id}` : '/api/units'
+      const method = isEdit ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      onSuccess()
+      onClose()
+    } catch (err: any) {
+      setError(err.message || 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">{isEdit ? 'Edit Unit' : 'New Unit'}</h2>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${error ? 'border-red-500' : 'border-gray-300'}`}
+              placeholder="e.g. pc, kg, L, drum"
+              autoFocus
+              maxLength={20}
+            />
+            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+            <p className="mt-1 text-xs text-gray-400">Max 20 characters</p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+              {saving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
+              {isEdit ? 'Save' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── UnitsManagement ────────────────────────────────────────────────────────────
+
+interface UnitsManagementProps {
+  isOpen: boolean
+  onClose: () => void
+  onUnitChange: () => void
+  onError: (msg: string) => void
+  allowedRoles: string[]
+}
+
+export function UnitsManagement({ isOpen, onClose, onUnitChange, onError, allowedRoles }: UnitsManagementProps) {
+  const [units, setUnits] = useState<Unit[]>([])
+  const [loading, setLoading] = useState(false)
+  const [createModal, setCreateModal] = useState(false)
+  const [editUnit, setEditUnit] = useState<Unit | null>(null)
+
+  const canManage = allowedRoles.includes('admin') || allowedRoles.includes('editor')
+  const canDelete = allowedRoles.includes('admin')
+
+  const loadUnits = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/units', { credentials: 'include' })
+      if (!res.ok) { if (res.status === 401) window.location.href = '/login'; return }
+      const data = await res.json()
+      setUnits(data.units || [])
+    } catch { onError('Failed to load units') }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    if (isOpen) loadUnits()
+  }, [isOpen])
+
+  const handleDelete = async (u: Unit) => {
+    if (!confirm(`Delete unit "${u.name}"? This cannot be undone.`)) return
+    try {
+      const res = await fetch(`/api/units/${u.id}`, { method: 'DELETE', credentials: 'include' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      onUnitChange()
+      loadUnits()
+    } catch (err: any) { onError(err.message || 'Failed to delete unit') }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-10">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-teal-100 rounded-lg flex items-center justify-center">
+                <Ruler className="w-4 h-4 text-teal-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Units</h2>
+                <p className="text-xs text-gray-500">{units.length} unit{units.length !== 1 ? 's' : ''}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {canManage && (
+                <button onClick={() => { setEditUnit(null); setCreateModal(true) }} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                  <Plus className="w-4 h-4" /> New Unit
+                </button>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-5 h-5 text-gray-500" /></button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12"><span className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" /></div>
+            ) : units.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">No units yet</div>
+            ) : (
+              <div className="grid gap-2">
+                {units.map(u => (
+                  <div key={u.id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-900 text-sm">{u.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {canManage && (
+                        <button onClick={() => { setEditUnit(u); setCreateModal(true) }} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Edit">
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button onClick={() => handleDelete(u)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors" title="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <UnitModal
+        isOpen={createModal}
+        onClose={() => setCreateModal(false)}
+        unit={editUnit}
+        onSuccess={() => { loadUnits(); onUnitChange() }}
         onError={onError}
       />
     </>

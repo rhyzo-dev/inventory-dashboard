@@ -9,6 +9,7 @@ interface EditModalProps {
   onSuccess: () => void
   onError: (msg: string) => void
   categories?: { name: string; color: string }[]
+  units?: { id: string; name: string }[]
 }
 
 const emptyForm = {
@@ -16,6 +17,7 @@ const emptyForm = {
   name: '',
   description: '',
   category: '',
+  unit: '',
   quantity: 0,
   min_threshold: 0,
   max_threshold: 100,
@@ -25,7 +27,7 @@ const emptyForm = {
   specification: '',
 }
 
-export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onSuccess, onError, categories }) => {
+export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onSuccess, onError, categories, units }) => {
   const isEdit = !!item
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
@@ -40,6 +42,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
         name: item.name || '',
         description: item.description || '',
         category: item.category || '',
+        unit: item.unit || '',
         quantity: item.quantity ?? 0,
         min_threshold: item.min_threshold ?? 0,
         max_threshold: item.max_threshold ?? 100,
@@ -104,6 +107,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           name: form.name.trim(),
           description: form.description || null,
           category: form.category || null,
+          unit: form.unit || null,
           quantity: form.quantity,
           min_threshold: form.min_threshold,
           max_threshold: form.max_threshold,
@@ -121,6 +125,7 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           name: form.name.trim(),
           description: form.description || undefined,
           category: form.category || undefined,
+          unit: form.unit || undefined,
           quantity: form.quantity,
           min_threshold: form.min_threshold,
           max_threshold: form.max_threshold,
@@ -143,6 +148,12 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
 
   // Build category options from API data (fallback to empty)
   const categoryOptions = categories?.map(c => c.name) || []
+
+  // Strict unit dropdown options. If the item carries a unit value that isn't in
+  // the managed list (e.g. a legacy free-text value or a deleted unit), surface it
+  // as an extra option so it isn't silently lost on save.
+  const unitOptions = units?.map(u => u.name) || []
+  const legacyUnit = form.unit && !unitOptions.includes(form.unit) ? form.unit : null
 
   if (!isOpen) return null
 
@@ -301,6 +312,28 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.max_threshold ? 'border-red-500' : 'border-gray-300'}`}
               />
               {errors.max_threshold && <p className="mt-1 text-xs text-red-600">{errors.max_threshold}</p>}
+            </div>
+          </div>
+
+          {/* Row 5b: Unit of measure */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <select
+                name="unit"
+                value={form.unit}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">None</option>
+                {legacyUnit && (
+                  <option value={legacyUnit}>{legacyUnit} (legacy)</option>
+                )}
+                {unitOptions.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center">
+              <p className="text-xs text-gray-400">Manage units in the <span className="font-medium text-gray-500">Units</span> panel.</p>
             </div>
           </div>
 

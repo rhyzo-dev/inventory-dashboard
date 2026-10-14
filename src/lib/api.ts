@@ -16,6 +16,7 @@ export interface InventoryItem {
   name: string;
   description: string | null;
   category: string | null;
+  unit: string | null;
   quantity: number;
   min_threshold: number;
   max_threshold: number;
@@ -62,6 +63,12 @@ export interface Category {
   name: string;
   color: string;
   description: string | null;
+  created_at: string;
+}
+
+export interface Unit {
+  id: string;
+  name: string;
   created_at: string;
 }
 
@@ -186,6 +193,7 @@ export interface CreateItemInput {
   name: string
   description?: string
   category?: string
+  unit?: string
   quantity?: number
   min_threshold?: number
   max_threshold?: number
@@ -215,6 +223,7 @@ export interface UpdateItemInput {
   name?: string
   description?: string | null
   category?: string | null
+  unit?: string | null
   quantity?: number
   min_threshold?: number
   max_threshold?: number
@@ -435,6 +444,54 @@ export const deleteCategory = async (id: string): Promise<void> => {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error || `Delete category failed: ${res.status}`)
+  }
+}
+
+// ── Units ─────────────────────────────────────────────────────────────────────
+
+export const fetchUnits = async (): Promise<{ units: Unit[] }> => {
+  const res = await fetch(`${apiBase}/api/units`, { ...CRED })
+  if (!res.ok) throw new Error(`Failed to fetch units: ${res.status}`)
+  return res.json()
+}
+
+export const createUnit = async (data: { name: string }): Promise<Unit> => {
+  const res = await fetch(`${apiBase}/api/units`, {
+    method: 'POST',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Create unit failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export const updateUnit = async (id: string, data: { name: string }): Promise<Unit> => {
+  const res = await fetch(`${apiBase}/api/units/${id}`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Update unit failed: ${res.status}`)
+  }
+  return res.json()
+}
+
+export const deleteUnit = async (id: string): Promise<void> => {
+  const res = await fetch(`${apiBase}/api/units/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error || `Delete unit failed: ${res.status}`)
   }
 }
 

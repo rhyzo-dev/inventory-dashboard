@@ -186,16 +186,17 @@ export const onRequestPost: PagesFunction = async (context) => {
 
     await env.DB.prepare(`
       INSERT INTO consumable_item
-        (id, sku, name, description, category, quantity, min_threshold, max_threshold,
+        (id, sku, name, description, category, unit, quantity, min_threshold, max_threshold,
          bin_location, production_date, expiry_date, image_url, creator_id, updater_id,
          created_at, updated_at, specification, facility_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       newItemId,
       sanitize(String(b.sku)),
       sanitize(String(b.name)),
       sanitize(String(b.description || '')),
       sanitize(String(b.category || '')),
+      sanitize(String(b.unit || '')),
       Number(b.quantity) || 0,
       Number(b.min_threshold) || 0,
       Number(b.max_threshold) || 0,

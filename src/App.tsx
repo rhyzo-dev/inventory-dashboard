@@ -11,14 +11,14 @@ import { EditModal } from './components/EditModal'
 import { DeleteDialog } from './components/DeleteDialog'
 import { ImageViewer } from './components/ImageViewer'
 import { UploadModal } from './components/UploadModal'
-import { UserManagement, CategoryManagement } from './components/AdminPanels'
+import { UserManagement, CategoryManagement, UnitsManagement } from './components/AdminPanels'
 import { SettingsModal } from './components/SettingsModal'
 import {
-  LogOut, Users, Tag, ChevronDown, SlidersHorizontal,
+  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal,
 } from 'lucide-react'
 
 function AppContent() {
-  const { user, categories, settings, doLogout, refreshCategories, refreshSettings } = useApp();
+  const { user, categories, units, settings, doLogout, refreshCategories, refreshUnits, refreshSettings } = useApp();
   const [filters, setFilters] = useState({
     search: '',
     category: '',
@@ -44,6 +44,7 @@ function AppContent() {
   // Admin panels
   const [showUsers, setShowUsers] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
+  const [showUnits, setShowUnits] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -215,6 +216,17 @@ function AppContent() {
               </button>
             )}
 
+            {canManageCategories && (
+              <button
+                onClick={() => setShowUnits(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                title="Units Management"
+              >
+                <Ruler className="w-4 h-4" />
+                <span className="hidden sm:inline">Units</span>
+              </button>
+            )}
+
             {isAdmin && (
               <button
                 onClick={() => setShowSettings(true)}
@@ -317,6 +329,7 @@ function AppContent() {
         onSuccess={handleEditSuccess}
         onError={(msg) => showToast(msg, 'error')}
         categories={categories}
+        units={units}
       />
 
       <DeleteDialog
@@ -358,6 +371,16 @@ function AppContent() {
           isOpen={showCategories}
           onClose={() => setShowCategories(false)}
           onCategoryChange={refreshCategories}
+          onError={(msg) => showToast(msg, 'error')}
+          allowedRoles={['admin', 'editor']}
+        />
+      )}
+
+      {canManageCategories && (
+        <UnitsManagement
+          isOpen={showUnits}
+          onClose={() => setShowUnits(false)}
+          onUnitChange={refreshUnits}
           onError={(msg) => showToast(msg, 'error')}
           allowedRoles={['admin', 'editor']}
         />

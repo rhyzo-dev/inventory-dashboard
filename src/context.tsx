@@ -1,14 +1,16 @@
 import { useState, useEffect, createContext, useContext, useCallback } from 'react'
-import { fetchInventory, fetchStats, fetchCategories, getCurrentUser, logout, type User, type Category, toProxyImageUrl, fetchSettings, type AppSettings } from './lib/api'
+import { fetchInventory, fetchStats, fetchCategories, fetchUnits, getCurrentUser, logout, type User, type Category, type Unit, toProxyImageUrl, fetchSettings, type AppSettings } from './lib/api'
 
 interface AppState {
   user: User | null
   loading: boolean
   categories: Category[]
+  units: Unit[]
   settings: AppSettings
   login: (username: string, password: string) => Promise<void>
   doLogout: () => Promise<void>
   refreshCategories: () => Promise<void>
+  refreshUnits: () => Promise<void>
   refreshSettings: () => Promise<void>
 }
 
@@ -18,6 +20,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [categories, setCategories] = useState<Category[]>([])
+  const [units, setUnits] = useState<Unit[]>([])
   const [settings, setSettings] = useState<AppSettings>({ company_name: 'Inventory Dashboard' })
 
   const initAuth = useCallback(async () => {
@@ -45,6 +48,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const initUnits = useCallback(async () => {
+    try {
+      const res = await fetchUnits()
+      setUnits(res.units || [])
+    } catch {
+      setUnits([])
+    }
+  }, [])
+
   const initSettings = useCallback(async () => {
     try {
       const res = await fetchSettings()
@@ -57,8 +69,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     initAuth()
     initCategories()
+    initUnits()
     initSettings()
-  }, [initAuth, initCategories, initSettings])
+  }, [initAuth, initCategories, initUnits, initSettings])
 
   const login = async (username: string, password: string) => {
     const { login: apiLogin } = await import('./lib/api')
@@ -79,6 +92,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }
 
+  const refreshUnits = async () => {
+    try {
+      const res = await fetchUnits()
+      setUnits(res.units || [])
+    } catch {}
+  }
+
   const refreshSettings = async () => {
     try {
       const res = await fetchSettings()
@@ -87,7 +107,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AppContext.Provider value={{ user, loading, categories, settings, login, doLogout, refreshCategories, refreshSettings }}>
+    <AppContext.Provider value={{ user, loading, categories, units, settings, login, doLogout, refreshCategories, refreshUnits, refreshSettings }}>
       {children}
     </AppContext.Provider>
   )

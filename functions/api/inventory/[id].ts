@@ -132,7 +132,7 @@ export const onRequestPut: PagesFunction = async (context) => {
     const updates: string[] = []
     const values: unknown[] = []
 
-    const stringFields = ['sku', 'name', 'description', 'category', 'bin_location', 'specification']
+    const stringFields = ['sku', 'name', 'description', 'category', 'unit', 'bin_location', 'specification']
     for (const field of stringFields) {
       if (b[field] !== undefined) {
         updates.push(`${field} = ?`)

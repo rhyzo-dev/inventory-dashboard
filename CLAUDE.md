@@ -13,6 +13,17 @@ npm run deploy
 # Equivalent to: npm run build && npx wrangler pages deploy dist --project-name=inventory-dashboard
 ```
 
+## Database Migrations (D1)
+Schema lives in `migrations/NNNN_name.sql`. There is **no auto-runner** — apply a new
+migration to the remote DB manually before/with your deploy:
+```bash
+npx wrangler d1 execute inventory-dashboard --remote --file=migrations/NNNN_name.sql
+```
+- **0005_units.sql** adds the `units` reference table, a `unit TEXT` column on
+  `consumable_item`, and seeds default units (pc, kg, L, drum, box, pallet).
+- `consumable_item.unit` stores the unit **name** (TEXT), the same denormalized-by-name
+  pattern as `category`. Deleting a unit is blocked while any item references it.
+
 ## Critical Configuration Decisions
 1. **Tailwind v3, NOT v4** — v4's `@tailwindcss/postcss` is ESM-only; loading it from CJS silently
    compiles but fails to scan source files, producing CSS missing all colors/spacing/shadows.
@@ -49,6 +60,10 @@ npm run deploy
 | POST | /api/categories | functions/api/categories.ts | editor+ | Create category |
 | PUT | /api/categories/:id | functions/api/categories/[id].ts | editor+ | Update category |
 | DELETE | /api/categories/:id | functions/api/categories/[id].ts | admin only | Delete category |
+| GET | /api/units | functions/api/units.ts | none | List all units |
+| POST | /api/units | functions/api/units.ts | editor+ | Create unit |
+| PUT | /api/units/:id | functions/api/units/[id].ts | editor+ | Update unit |
+| DELETE | /api/units/:id | functions/api/units/[id].ts | admin only | Delete unit (blocked while in use) |
 
 ## Authentication
 - JWT in httpOnly, Secure, SameSite=Strict cookie (`auth_token`)

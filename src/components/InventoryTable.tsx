@@ -8,6 +8,7 @@ export interface InventoryItem {
   name: string;
   description: string | null;
   category: string | null;
+  unit: string | null;
   quantity: number;
   min_threshold: number;
   max_threshold: number;
@@ -141,6 +142,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium">
                   {item.quantity}
+                  {item.unit && <span className="ml-1 text-xs font-normal text-gray-400">{item.unit}</span>}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${

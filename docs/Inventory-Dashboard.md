@@ -171,7 +171,7 @@ All responses are JSON. Auth endpoints set/read `httpOnly` cookies.
 | `POST` | `/api/import` | editor+ | Bulk import — body `{ rows: […], dry_run: bool }`. Dry-run returns a per-row plan; commit inserts in one D1 transaction. Duplicates (same SKU + name + bin + specification + production + expiry) are **skipped**, never overwritten (cap 1000 rows) |
 | `POST` | `/api/upload` | editor+ | Upload image to Tigris (returns object key) |
 | `GET` | `/api/images/:key` | public | Proxy an image from Tigris |
-| `GET` | `/api/stats` | required | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
+| `GET` | `/api/stats` | required | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count, expired_count }` — “expiring soon” = due within 30 days but not yet; “expired” = past its expiry date |
 | `GET` | `/api/settings` | required | App settings (`company_name`) |
 | `PUT` | `/api/settings` | admin | Update settings |
 | `GET` | `/api/export` | required | CSV or XLSX of the current filter |
@@ -527,7 +527,7 @@ HTML/JS/CSS 静态资源
 | `POST` | `/api/import` | editor+ | 批量导入——请求体 `{ rows: […], dry_run: 布尔 }`。试跑返回逐行计划；提交时在单个 D1 事务内插入。重复项（相同 SKU + 名称 + 库位 + 规格 + 生产日期 + 有效期）**跳过**，绝不覆盖（每批上限 1000 行） |
 | `POST` | `/api/upload` | editor+ | 上传图片到 Tigris（返回对象 key） |
 | `GET` | `/api/images/:key` | 公开 | 从 Tigris 代理返回图片 |
-| `GET` | `/api/stats` | 需登录 | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
+| `GET` | `/api/stats` | 需登录 | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count, expired_count }` —「即将过期」= 30 天内到期且尚未过期；「已过期」= 已过期 |
 | `GET` | `/api/settings` | 需登录 | 应用设置（`company_name`） |
 | `PUT` | `/api/settings` | admin | 更新设置 |
 | `GET` | `/api/export` | 需登录 | 按当前筛选导出 CSV 或 XLSX |

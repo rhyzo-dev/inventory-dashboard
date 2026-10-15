@@ -38,6 +38,7 @@ export interface InventoryResponse {
     low_stock_count: number;
     out_of_stock_count: number;
     expiring_soon_count: number;
+    expired_count: number;
   };
   pagination: {
     page: number;
@@ -662,6 +663,8 @@ export interface SkuSummaryRow {
   soonest_expiry: string | null
   undated_count: number
   expiring_soon: boolean
+  /** True if any lot of this SKU is past its expiry date. */
+  expired: boolean
   is_out: boolean
   is_low: boolean
   lots: SkuLot[]

@@ -127,7 +127,9 @@ export const onRequestGet: PagesFunction = async (context) => {
                  THEN ci.expiry_date END)                 AS soonest_expiry,
         COUNT(CASE WHEN ci.expiry_date IS NULL OR ci.expiry_date = '' THEN 1 END) AS undated_count,
         MAX(CASE WHEN ci.expiry_date IS NOT NULL AND ci.expiry_date != ''
-                  AND ci.expiry_date <= date('now', '+30 days') THEN 1 ELSE 0 END) AS expiring_soon
+                  AND ci.expiry_date >= date('now') AND ci.expiry_date <= date('now', '+30 days') THEN 1 ELSE 0 END) AS expiring_soon,
+        MAX(CASE WHEN ci.expiry_date IS NOT NULL AND ci.expiry_date != ''
+                  AND ci.expiry_date < date('now') THEN 1 ELSE 0 END) AS expired
       FROM consumable_item ci
       WHERE ${whereClause}
       GROUP BY ci.sku
@@ -181,6 +183,7 @@ export const onRequestGet: PagesFunction = async (context) => {
         soonest_expiry: (r.soonest_expiry as string | null) || null,
         undated_count: Number(r.undated_count) || 0,
         expiring_soon: Number(r.expiring_soon) > 0,
+        expired: Number(r.expired) > 0,
         // Threshold-driven flags only make sense when a minimum is actually set
         is_out: total <= 0,
         is_low: minThreshold != null && total > 0 && total < minThreshold,

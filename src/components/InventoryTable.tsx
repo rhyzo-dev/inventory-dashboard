@@ -164,13 +164,15 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     <div>
                       <div>{formatDate(item.expiry_date)}</div>
                       {daysToExpiry !== null && (
-                        <span className={`text-xs ${
-                          daysToExpiry < 0 ? 'text-red-500'
-                          : daysToExpiry <= 7 ? 'text-yellow-600'
-                          : 'text-green-600'
-                        }`}>
-                          {daysToExpiry > 0 ? `+${daysToExpiry}d` : `${daysToExpiry}d`}
-                        </span>
+                        daysToExpiry < 0 ? (
+                          <span className="text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                            Expired · -{Math.abs(daysToExpiry)}d
+                          </span>
+                        ) : (
+                          <span className={`text-xs font-medium ${daysToExpiry <= 30 ? 'text-amber-600' : 'text-green-600'}`}>
+                            +{daysToExpiry}d{daysToExpiry <= 30 ? ' · expiring soon' : ''}
+                          </span>
+                        )
                       )}
                     </div>
                   ) : '—'}

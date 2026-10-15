@@ -132,9 +132,11 @@ export const onRequestGet: PagesFunction = async (context) => {
       where.push('quantity <= 0')
     } else if (status === 'adequate') {
       where.push('quantity > 0 AND quantity >= min_threshold')
+    } else if (status === 'expired' || view === 'expired') {
+      where.push("expiry_date IS NOT NULL AND expiry_date != '' AND expiry_date < date('now')")
     }
     if (view === 'expiring') {
-      where.push("expiry_date IS NOT NULL AND expiry_date != '' AND expiry_date <= date('now', '+30 days')")
+      where.push("expiry_date IS NOT NULL AND expiry_date != '' AND expiry_date >= date('now') AND expiry_date <= date('now', '+30 days')")
     }
     const whereClause = where.join(' AND ')
 

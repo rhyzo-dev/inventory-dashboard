@@ -28,13 +28,15 @@ const STATUS_OPTIONS: FilterOption[] = [
   { value: '', label: 'All Status' },
   { value: 'adequate', label: 'Adequate' },
   { value: 'low_stock', label: 'Low Stock' },
-  { value: 'out_of_stock', label: 'Out of Stock' }
+  { value: 'out_of_stock', label: 'Out of Stock' },
+  { value: 'expired', label: 'Expired' }
 ];
 
 const VIEW_OPTIONS: FilterOption[] = [
   { value: '', label: 'All Items' },
   { value: 'low-stock', label: 'Low Stock Only' },
-  { value: 'expiring', label: 'Expiring Soon' }
+  { value: 'expiring', label: 'Expiring Soon' },
+  { value: 'expired', label: 'Expired Only' }
 ];
 
 // Server-side order. Default is SKU so the list is a stable catalog, not a feed.

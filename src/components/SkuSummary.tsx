@@ -316,6 +316,11 @@ const SkuSummary: React.FC<SkuSummaryProps> = ({ skus, loading, canEdit, onEditT
                     }`}>
                       {status.label}
                     </span>
+                    {row.expired && (
+                      <span className="ml-2 px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                        Expired
+                      </span>
+                    )}
                     {row.expiring_soon && (
                       <span className="ml-2 px-2 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full bg-orange-100 text-orange-800">
                         Expiring soon

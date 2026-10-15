@@ -27,6 +27,7 @@ const STAT_KEY_FILTERS: Record<StatKey, { status: string; view: string; sort: st
   low:      { status: 'low_stock', view: '', sort: 'qty-asc' },
   out:      { status: 'out_of_stock', view: '', sort: 'qty-asc' },
   expiring: { status: '', view: 'expiring', sort: 'expiry' },
+  expired:  { status: 'expired', view: '', sort: 'expiry' },
 }
 
 function AppContent() {
@@ -92,6 +93,7 @@ function AppContent() {
   // Which stat card reflects the current filter state (drives highlight + toggle-off).
   const activeStat: StatKey | '' =
     filters.view === 'expiring' ? 'expiring'
+    : filters.status === 'expired' ? 'expired'
     : filters.status === 'low_stock' ? 'low'
     : filters.status === 'out_of_stock' ? 'out'
     : (filters.status === '' && filters.view === '') ? 'all'

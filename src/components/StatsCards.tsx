@@ -1,7 +1,7 @@
 import React from 'react';
-import { Package, AlertTriangle, AlertCircle, Calendar, ChevronRight } from 'lucide-react';
+import { Package, AlertTriangle, AlertCircle, Calendar, ChevronRight, Skull } from 'lucide-react';
 
-export type StatKey = 'all' | 'low' | 'out' | 'expiring';
+export type StatKey = 'all' | 'low' | 'out' | 'expiring' | 'expired';
 
 interface StatsCardProps {
   title: string;
@@ -57,6 +57,7 @@ interface StatsCardsProps {
     low_stock_count: number;
     out_of_stock_count: number;
     expiring_soon_count: number;
+    expired_count?: number;
   };
   /** When provided, the cards act as one-click filters into the table below. */
   onSelect?: (key: StatKey) => void;
@@ -71,7 +72,7 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ stats, onSelect, active 
 
   return (
     <div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatsCard
           title="Total Items"
           value={stats.total_items}
@@ -103,6 +104,14 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ stats, onSelect, active 
           color="green"
           active={active === 'expiring'}
           onClick={select ? () => select('expiring') : undefined}
+        />
+        <StatsCard
+          title="Expired"
+          value={stats.expired_count ?? 0}
+          Icon={Skull}
+          color="red"
+          active={active === 'expired'}
+          onClick={select ? () => select('expired') : undefined}
         />
       </div>
       {select && (

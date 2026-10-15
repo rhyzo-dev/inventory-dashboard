@@ -43,12 +43,14 @@ npx wrangler d1 execute inventory-dashboard --remote --file=migrations/NNNN_name
 | Method | Path | Handler | Auth | Purpose |
 |--------|------|---------|------|---------|
 | GET | /api/inventory | functions/api/inventory.ts | required | List items (with filters + pagination) |
-| POST | /api/inventory | functions/api/inventory.ts | editor+ | Create item (generates UUID) |
+| POST | /api/inventory | functions/api/inventory.ts | editor+ | Create item (generates UUID). Duplicate guard: 409 if it matches on all six lot fields (SKU+name+bin+specification+production+expiry) unless body `allow_duplicate` is true |
+| GET | /api/inventory/duplicates | functions/api/inventory/duplicates.ts | required | Pre-check: list items matching the six lot fields (powers the Add form's live duplicate warning) |
 | PUT | /api/inventory/:id | functions/api/inventory/[id].ts | editor+ | Update item |
 | DELETE | /api/inventory/:id | functions/api/inventory/[id].ts | admin only | Delete item |
 | POST | /api/upload | functions/api/upload.ts | editor+ | Upload image to Tigris |
 | GET | /api/stats | functions/api/stats.ts | required | Aggregate statistics |
 | GET | /api/export | functions/api/export.ts | required | CSV/XLSX export |
+| POST | /api/import | functions/api/import.ts | editor+ | Bulk import — `{ rows, dry_run }`; dry-run previews, commit inserts in one D1 tx (duplicates skipped, never overwritten; cap 1000 rows). File parsing is client-side (SheetJS). |
 | POST | /api/auth/login | functions/api/auth/login.ts | none | Login (rate-limited: 5/min/IP) |
 | POST | /api/auth/logout | functions/api/auth/logout.ts | required | Logout (revokes refresh token) |
 | GET | /api/users/me | functions/api/users/me.ts | required | Get current user |

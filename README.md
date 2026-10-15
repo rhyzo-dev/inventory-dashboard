@@ -116,9 +116,11 @@ Set the secrets/vars above, and every push rebuilds.
 | PUT | /api/units/:id | editor+ | Update unit |
 | DELETE | /api/units/:id | admin | Delete unit (blocked while in use) |
 | GET | /api/inventory | required | List items (filtered + paginated; includes `unit`) |
-| POST | /api/inventory | editor+ | Create item |
+| POST | /api/inventory | editor+ | Create item — returns `409` if it matches an existing lot on all six fields (SKU + name + bin + specification + production + expiry) unless `allow_duplicate: true` |
+| GET | /api/inventory/duplicates | required | Pre-check: list items matching the six lot fields (drives the Add form's live duplicate warning) |
 | PUT | /api/inventory/:id | editor+ | Update item |
 | DELETE | /api/inventory/:id | admin | Delete item |
+| POST | /api/import | editor+ | Bulk import — `{ rows, dry_run }`; dry-run previews, commit inserts (duplicates skipped, never overwritten) |
 | POST | /api/upload | editor+ | Upload image to Tigris |
 | GET | /api/images/:key | public | Serve an image from Tigris (proxied; Tigris has no public ACLs) |
 | GET | /api/stats | required | Aggregate statistics |

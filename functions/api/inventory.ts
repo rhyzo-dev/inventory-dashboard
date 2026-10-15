@@ -200,6 +200,54 @@ export const onRequestPost: PagesFunction = async (context) => {
       return new Response(JSON.stringify({ error: 'SKU and name are required' }), { status: 400, headers: SECURITY_HEADERS })
     }
 
+    // Authoritative duplicate guard. Same 6-field lot identity the live
+    // pre-check (GET /api/inventory/duplicates) uses: sku + name + bin +
+    // specification + production_date + expiry_date. An un-overridden match
+    // is a true duplicate of an existing lot, so refuse it with 409 unless the
+    // client explicitly passed allow_duplicate (an intentional second lot).
+    if (b.allow_duplicate !== true) {
+      const dup = await env.DB.prepare(`
+        SELECT id, sku, name, quantity, unit, bin_location, specification,
+               production_date, expiry_date
+        FROM consumable_item
+        WHERE sku = ?
+          AND name = ?
+          AND COALESCE(bin_location, '') = ?
+          AND COALESCE(specification, '') = ?
+          AND COALESCE(production_date, '') = ?
+          AND COALESCE(expiry_date, '') = ?
+        LIMIT 5
+      `).bind(
+        sanitize(String(b.sku)),
+        sanitize(String(b.name)),
+        sanitize(String(b.bin_location || '')),
+        sanitize(String(b.specification || '')),
+        b.production_date ? String(b.production_date) : '',
+        b.expiry_date ? String(b.expiry_date) : ''
+      ).all<any>()
+
+      const matches = (dup.results || []).map((r: any) => ({
+        id: r.id,
+        sku: r.sku,
+        name: r.name,
+        quantity: r.quantity,
+        unit: r.unit || '',
+        bin_location: r.bin_location || '',
+        specification: r.specification || '',
+        production_date: r.production_date || '',
+        expiry_date: r.expiry_date || '',
+      }))
+
+      if (matches.length > 0) {
+        return new Response(JSON.stringify({
+          error: 'This item already exists — same SKU, name, bin, specification and dates',
+          duplicate: true,
+          matches,
+          message: 'A matching lot is already in the list. Add a distinguishing production/expiry date for a new lot, or confirm "add anyway" to record it as a separate identical lot.',
+        }), { status: 409, headers: { 'Content-Type': 'application/json', ...SECURITY_HEADERS } })
+      }
+    }
+
     // Generate UUID for this new item — D1 UUID tables have no auto-increment
     const newItemId = crypto.randomUUID()
     const now = new Date().toISOString()

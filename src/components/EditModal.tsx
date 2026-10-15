@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
-import { X, Save, Loader2, Trash2 } from 'lucide-react'
-import { updateItem, createItem, removeImage, type UpdateItemInput, type CreateItemInput } from '../lib/api'
+import React, { useState, useEffect, useRef } from 'react'
+import { X, Save, Loader2, Trash2, AlertTriangle } from 'lucide-react'
+import { updateItem, createItem, removeImage, findDuplicates, DuplicateItemError, type UpdateItemInput, type CreateItemInput } from '../lib/api'
 
 interface EditModalProps {
   isOpen: boolean
@@ -36,6 +36,14 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
   const [imagePreview, setImagePreview] = useState<string | null>(item?.image_url ?? null)
   const [removingImage, setRemovingImage] = useState(false)
 
+  // Duplicate detection (Add mode only). `dupMatches` lists existing lots that
+  // collide on all six identity fields; save is blocked until the editor either
+  // changes a field or ticks "add anyway" (`allowDuplicate`).
+  const [dupMatches, setDupMatches] = useState<any[]>([])
+  const [checkingDup, setCheckingDup] = useState(false)
+  const [allowDuplicate, setAllowDuplicate] = useState(false)
+  const dupQuery = useRef<{ sku: string; name: string; bin: string; spec: string; prod: string; exp: string } | null>(null)
+
   useEffect(() => {
     if (item) {
       setForm({
@@ -59,7 +67,54 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
     }
     setErrors({})
     setRemovingImage(false)
+    setDupMatches([])
+    setCheckingDup(false)
+    setAllowDuplicate(false)
+    dupQuery.current = null
   }, [item, isOpen])
+
+  // Live duplicate pre-check (Add mode): debounce on the six identity fields so
+  // the warning appears as the editor types, not only at submit. A failed or
+  // in-flight check never blocks the form — the authoritative guard is the
+  // server-side 409 on the create call.
+  useEffect(() => {
+    if (isEdit || !isOpen) return
+    const key = {
+      sku: form.sku.trim(),
+      name: form.name.trim(),
+      bin: form.bin_location.trim(),
+      spec: form.specification.trim(),
+      prod: form.production_date,
+      exp: form.expiry_date,
+    }
+    if (!key.sku || !key.name) {
+      setDupMatches([])
+      setCheckingDup(false)
+      setAllowDuplicate(false)
+      dupQuery.current = null
+      return
+    }
+    dupQuery.current = key
+    setCheckingDup(true)
+    const handle = window.setTimeout(async () => {
+      const matches = await findDuplicates({
+        sku: key.sku,
+        name: key.name,
+        bin_location: key.bin || undefined,
+        specification: key.spec || undefined,
+        production_date: key.prod || undefined,
+        expiry_date: key.exp || undefined,
+      })
+      // Ignore a stale response: the fields changed again while we were waiting.
+      if (!dupQuery.current || JSON.stringify(dupQuery.current) !== JSON.stringify(key)) return
+      setDupMatches(matches)
+      setCheckingDup(false)
+      // Reset the override whenever the identity changes — it only ever applied
+      // to the exact lot the editor saw when they ticked it.
+      setAllowDuplicate(false)
+    }, 350)
+    return () => window.clearTimeout(handle)
+  }, [form.sku, form.name, form.bin_location, form.specification, form.production_date, form.expiry_date, isOpen, isEdit])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target
@@ -100,6 +155,14 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
+
+    // Duplicate gate (create only): if we already know this collides with an
+    // existing lot and the editor hasn't opted to override, stop here. The amber
+    // banner explains why and offers "add anyway".
+    if (!isEdit && dupMatches.length > 0 && !allowDuplicate) {
+      return
+    }
+
     setSaving(true)
     let savedId: string | undefined
     try {
@@ -137,6 +200,8 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
           expiry_date: form.expiry_date || undefined,
           specification: form.specification || undefined,
           image_url: imagePreview || undefined,
+          // Only send when the editor explicitly overrode the guard.
+          allow_duplicate: allowDuplicate || undefined,
         }
         const res = await createItem(createData)
         savedId = res.id
@@ -144,7 +209,14 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
       onSuccess(savedId)
       onClose()
     } catch (err: any) {
-      onError(err.message || 'Save failed')
+      // 409 = the server found the duplicate (the live pre-check was stale, or
+      // another tab added it first). Surface it via the banner, not a generic toast.
+      if (err instanceof DuplicateItemError) {
+        setDupMatches(err.matches)
+        setAllowDuplicate(false)
+      } else {
+        onError(err.message || 'Save failed')
+      }
     } finally {
       setSaving(false)
     }
@@ -365,6 +437,58 @@ export const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, item, onS
               {errors.expiry_date && <p className="mt-1 text-xs text-red-600">{errors.expiry_date}</p>}
             </div>
           </div>
+
+          {/* Duplicate warning (Add mode) */}
+          {!isEdit && (checkingDup || dupMatches.length > 0) && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 space-y-2">
+              {checkingDup && dupMatches.length === 0 && (
+                <div className="flex items-center gap-2 text-xs text-amber-700">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking for duplicates…
+                </div>
+              )}
+              {dupMatches.length > 0 && (
+                <>
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-medium">
+                        Possible duplicate — {dupMatches.length} existing item{dupMatches.length === 1 ? '' : 's'} match this exact lot.
+                      </p>
+                      <ul className="mt-1.5 list-disc pl-5 text-xs text-amber-700">
+                        {dupMatches.slice(0, 3).map((m) => (
+                          <li key={m.id}>
+                            <span className="font-medium">{m.sku}</span> · {m.name}
+                            {m.bin_location ? ` · bin ${m.bin_location}` : ''}
+                            {m.specification ? ` · ${m.specification}` : ''}
+                            {m.production_date ? ` · prod ${m.production_date}` : ''}
+                            {m.expiry_date ? ` · exp ${m.expiry_date}` : ''}
+                            {m.quantity != null ? ` · ${m.quantity}${m.unit ? ` ${m.unit}` : ''} on record` : ''}
+                          </li>
+                        ))}
+                        {dupMatches.length > 3 && (
+                          <li className="list-none pl-0 text-amber-600">…and {dupMatches.length - 3} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    {allowDuplicate
+                      ? 'You’re overriding the check — this will be saved as a separate, identical lot.'
+                      : 'Saving is blocked while this lot already exists. Add a distinguishing production/expiry date, or confirm “add anyway”.'}
+                  </p>
+                  <label className="flex items-center gap-2 text-sm text-amber-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowDuplicate}
+                      onChange={(e) => setAllowDuplicate(e.target.checked)}
+                      className="h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="font-medium">Add anyway — I understand this duplicates an existing item</span>
+                  </label>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">

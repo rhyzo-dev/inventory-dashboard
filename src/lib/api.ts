@@ -218,10 +218,28 @@ export interface CreateItemInput {
   min_threshold?: number
   max_threshold?: number
   bin_location?: string
+  specification?: string
   production_date?: string
   expiry_date?: string
   image_url?: string
-  specification?: string
+  /** Set true to override the server's duplicate guard (record a deliberate
+   *  second lot that matches an existing one on all six identifying fields). */
+  allow_duplicate?: boolean
+}
+
+/**
+ * Thrown when POST /api/inventory returns 409 — the lot being created already
+ * exists (same sku + name + bin + specification + production + expiry). Carries
+ * the matching items so the UI can show exactly what it collided with and
+ * offer the "add anyway" override.
+ */
+export class DuplicateItemError extends Error {
+  matches: any[]
+  constructor(message: string, matches: any[]) {
+    super(message)
+    this.name = 'DuplicateItemError'
+    this.matches = matches
+  }
 }
 
 export const createItem = async (data: CreateItemInput): Promise<{ id: string; message: string }> => {
@@ -233,9 +251,86 @@ export const createItem = async (data: CreateItemInput): Promise<{ id: string; m
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
+    if (res.status === 409 && err.duplicate) {
+      throw new DuplicateItemError(err.message || err.error || 'This item already exists.', err.matches || [])
+    }
     throw new Error(err.error || `Create failed: ${res.status}`)
   }
   return res.json()
+}
+
+/**
+ * Live duplicate pre-check for the Add form. Finds existing items that share
+ * the same lot identity as the given fields. Returns [] when there's nothing
+ * to compare on, or when the lookup itself fails (a pre-check failure must
+ * never block the form — the authoritative guard is on the create call).
+ */
+export const findDuplicates = async (q: {
+  sku: string
+  name: string
+  bin_location?: string
+  specification?: string
+  production_date?: string
+  expiry_date?: string
+  exclude_id?: string
+}): Promise<any[]> => {
+  const params = new URLSearchParams()
+  params.set('sku', q.sku)
+  params.set('name', q.name)
+  if (q.bin_location) params.set('bin_location', q.bin_location)
+  if (q.specification) params.set('specification', q.specification)
+  if (q.production_date) params.set('production_date', q.production_date)
+  if (q.expiry_date) params.set('expiry_date', q.expiry_date)
+  if (q.exclude_id) params.set('exclude_id', q.exclude_id)
+  try {
+    const res = await fetch(`${apiBase}/api/inventory/duplicates?${params.toString()}`, { ...CRED })
+    if (!res.ok) return []
+    const json = await res.json().catch(() => ({ matches: [] }))
+    return json.matches || []
+  } catch {
+    return []
+  }
+}
+
+// ── Bulk import ─────────────────────────────────────────────────────────────────
+export type ImportRowStatus = 'create' | 'skip_duplicate' | 'error'
+
+export interface ImportPlanRow {
+  index: number
+  sku: string
+  status: ImportRowStatus
+  reason?: string
+}
+
+export interface ImportResult {
+  dry_run: boolean
+  /** Present on dry-run responses. */
+  summary?: { total: number; create: number; skip: number; error: number }
+  results?: ImportPlanRow[]
+  /** Present on real-import responses. */
+  created?: number
+  skipped?: number
+  errors?: number
+  message?: string
+}
+
+/**
+ * Post imported rows to /api/import. `dryRun` returns a per-row plan without
+ * writing; the client then re-posts the accepted rows with dryRun=false to commit.
+ */
+export const importInventory = async (
+  rows: Record<string, unknown>[],
+  dryRun: boolean
+): Promise<ImportResult> => {
+  const res = await fetch(`${apiBase}/api/import`, {
+    method: 'POST',
+    headers: getHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ rows, dry_run: dryRun }),
+  })
+  const json = await res.json().catch(() => ({ error: res.statusText }))
+  if (!res.ok) throw new Error(json.error || `Import failed: ${res.status}`)
+  return json
 }
 
 export interface UpdateItemInput {

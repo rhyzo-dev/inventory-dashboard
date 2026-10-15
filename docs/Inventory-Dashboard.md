@@ -38,6 +38,8 @@ facility. It supports:
   uses a stable, user-selectable **sort** (SKU / name / quantity / FEFO / recency) so
   newly added items land in place instead of jumping to the top
 - Self-service **change-your-own-password** (any role), revoking the old session
+- **Bulk import** from Excel / CSV: download a template, preview a per-row plan
+  (add / duplicate-skip / error), then commit. Duplicates are skipped, never overwritten
 - Role-based user management (admin / editor / viewer)
 - Management of reference data: **categories** and **units**
 - App-wide settings (currently the company name)
@@ -160,11 +162,13 @@ All responses are JSON. Auth endpoints set/read `httpOnly` cookies.
 | `PUT` | `/api/units/:id` | editor+ | Rename unit |
 | `DELETE` | `/api/units/:id` | admin | Delete unit (409 if in use) |
 | `GET` | `/api/inventory` | required | List items (filter + pagination) |
-| `POST` | `/api/inventory` | editor+ | Create item |
+| `POST` | `/api/inventory` | editor+ | Create item. **Duplicate guard:** returns `409` if an item matches on all six lot fields (SKU + name + bin + specification + production + expiry) unless the body sets `allow_duplicate: true` |
+| `GET` | `/api/inventory/duplicates` | required | Pre-check: list items matching the six lot fields (`?sku&name&bin_location&specification&production_date&expiry_date&exclude_id`) — powers the Add form’s live duplicate warning |
 | `PUT` | `/api/inventory/:id` | editor+ | Update item |
 | `DELETE` | `/api/inventory/:id` | admin | Delete item |
 | `GET` | `/api/sku` | required | Per-SKU summary (total on hand, FEFO lots, thresholds) — `?category&search&sort` |
 | `PUT` | `/api/sku` | editor+ | Upsert a SKU's optional min/max thresholds (body `{ sku, min_threshold?, max_threshold? }`) |
+| `POST` | `/api/import` | editor+ | Bulk import — body `{ rows: […], dry_run: bool }`. Dry-run returns a per-row plan; commit inserts in one D1 transaction. Duplicates (same SKU + name + bin + specification + production + expiry) are **skipped**, never overwritten (cap 1000 rows) |
 | `POST` | `/api/upload` | editor+ | Upload image to Tigris (returns object key) |
 | `GET` | `/api/images/:key` | public | Proxy an image from Tigris |
 | `GET` | `/api/stats` | required | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
@@ -298,6 +302,28 @@ menu → **Change Password**. The server (`POST /api/auth/change-password`):
    the old credential can no longer mint a session. The current access token stays valid
    until it lapses, so the user is not logged out mid-page.
 
+### 6.10 Bulk import (Excel / CSV)
+Editors and admins can load many items at once from a spreadsheet instead of keying
+them in one at a time. From the header, **Import** (editor+ only) opens a dialog:
+
+1. **Download a template** (Excel `.xlsx` or `.csv`) with the exact columns and an
+   example row: `SKU* · Name* · Specification · Category · Unit · Quantity ·
+   Min/Max Threshold · Bin Location · Production/Expiry Date · Description`.
+2. **Upload** the filled file. The app parses it **in the browser** (SheetJS) and posts
+   a dry-run to `POST /api/import`. Nothing is written yet.
+3. **Preview** a per-row plan: 🟢 *will add* · 🟡 *duplicate — will skip* · 🔴 *error*
+   (with the reason). Duplicates are detected by lot identity — `SKU + bin location +
+   production date + expiry date` — against both the existing data and earlier rows in the
+   same file.
+4. **Import** commits the "will add" rows in a single D1 transaction and reports a
+   summary (added / skipped / errors).
+
+Duplicate policy is **skip & report**: existing items are never overwritten, so the same
+file can be re-run safely (idempotent). Per-row validation mirrors the Add-Item form
+(SKU format, date format, `max ≥ min`, non-negative quantity). One upload is capped at
+1000 rows. Image files are not part of the import — upload photos to items separately
+(§6.5).
+
 ## 7. Operations
 
 ### 7.1 Build & deploy
@@ -377,6 +403,7 @@ All services run within Cloudflare / Tigris free tiers for light internal use �
   （SKU / 名称 / 数量 / FEFO / 最近变更），新加入的条目落到自己位置而不是跳到最上方，
   并短暂**高亮**一次以便定位
 - 自助**修改本人密码**（各角色均可），并撤销旧会话
+- 从 Excel / CSV **批量导入**：下载模板、预览逐行计划（新增 / 重复跳过 / 出错），再提交。重复项一律跳过、绝不覆盖
 - 基于角色的用户管理（管理员 / 编辑 / 查看）
 - 参考数据管理：**类别** 与 **单位**
 - 应用级设置（目前为：公司名称）
@@ -491,11 +518,13 @@ HTML/JS/CSS 静态资源
 | `PUT` | `/api/units/:id` | editor+ | 重命名单位 |
 | `DELETE` | `/api/units/:id` | admin | 删除单位（使用中返回 409） |
 | `GET` | `/api/inventory` | 需登录 | 条目列表（筛选 + 分页） |
-| `POST` | `/api/inventory` | editor+ | 新建条目 |
+| `POST` | `/api/inventory` | editor+ | 新建条目。**重复防护：** 若条目在六个批次字段（SKU + 名称 + 库位 + 规格 + 生产日期 + 有效期）上全部匹配，则返回 `409`；除非请求体设置 `allow_duplicate: true` |
+| `GET` | `/api/inventory/duplicates` | 需登录 | 预检：列出在六个批次字段上匹配的条目（`?sku&name&bin_location&specification&production_date&expiry_date&exclude_id`）——为新增表单的实时重复警告提供支持 |
 | `PUT` | `/api/inventory/:id` | editor+ | 更新条目 |
 | `DELETE` | `/api/inventory/:id` | admin | 删除条目 |
 | `GET` | `/api/sku` | 需登录 | 按 SKU 汇总（现有总量、FEFO 批次、阈值）——`?category&search&sort` |
 | `PUT` | `/api/sku` | editor+ | 更新某 SKU 的可选最小/最大阈值（请求体 `{ sku, min_threshold?, max_threshold? }`） |
+| `POST` | `/api/import` | editor+ | 批量导入——请求体 `{ rows: […], dry_run: 布尔 }`。试跑返回逐行计划；提交时在单个 D1 事务内插入。重复项（相同 SKU + 名称 + 库位 + 规格 + 生产日期 + 有效期）**跳过**，绝不覆盖（每批上限 1000 行） |
 | `POST` | `/api/upload` | editor+ | 上传图片到 Tigris（返回对象 key） |
 | `GET` | `/api/images/:key` | 公开 | 从 Tigris 代理返回图片 |
 | `GET` | `/api/stats` | 需登录 | `{ total_items, low_stock_count, out_of_stock_count, expiring_soon_count }` |
@@ -611,6 +640,23 @@ HTML/JS/CSS 静态资源
 2. 拒绝沿用旧密码，并执行 §5.2 的强度策略 + HIBP 泄露校验。
 3. 重新哈希并存储新密码，随后**删除该用户的刷新令牌**，使旧凭据无法再开通会话；
    当前访问令牌在到期前仍有效，因此不会把用户当场登出。
+
+### 6.10 批量导入（Excel / CSV）
+编辑者与管理员可一次从电子表格载入大量条目，而无需逐条录入。在页头点击**导入**
+（仅 editor 及以上），打开对话框：
+
+1. **下载模板**（Excel `.xlsx` 或 `.csv`），含精确列与一行示例：`SKU* · 名称* ·
+   规格 · 类别 · 单位 · 数量 · 最小/最大阈值 · 货位 · 生产/到期日期 · 描述`。
+2. **上传**填好的文件。应用在**浏览器端**解析（SheetJS）并调用 `POST /api/import`
+   试跑，此时尚未写入任何数据。
+3. **预览**逐行计划：🟢 *将新增* · 🟡 *重复——将跳过* · 🔴 *出错*（含原因）。重复项按
+   批次标识判定——`SKU + 货位 + 生产日期 + 到期日期`——同时对照库内已有数据与同一文件
+   中靠前的行。
+4. **导入**在单个 D1 事务内提交"将新增"的行，并给出汇总（新增 / 跳过 / 出错数）。
+
+重复策略为**跳过并报告**：绝不覆盖已有条目，因此同一文件可安全重跑（幂等）。逐行校验
+与新增条目表单一致（SKU 格式、日期格式、`max ≥ min`、数量非负）。单次导入上限 1000 行。
+图片不属于导入范围——请通过 §6.5 为条目单独上传照片。
 
 ## 7. 运维
 

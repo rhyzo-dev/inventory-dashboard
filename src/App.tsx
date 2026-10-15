@@ -15,8 +15,9 @@ import { UploadModal } from './components/UploadModal'
 import { UserManagement, CategoryManagement, UnitsManagement } from './components/AdminPanels'
 import { SettingsModal } from './components/SettingsModal'
 import ChangePasswordModal from './components/ChangePasswordModal'
+import { ImportModal } from './components/ImportModal'
 import {
-  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal, Package, Layers, KeyRound,
+  LogOut, Users, Tag, Ruler, ChevronDown, SlidersHorizontal, Package, Layers, KeyRound, Upload,
 } from 'lucide-react'
 
 /** One-click attention filters: a stat card drives status/view + a matching sort,
@@ -67,7 +68,8 @@ function AppContent() {
   const [showCategories, setShowCategories] = useState(false);
   const [showUnits, setShowUnits] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showImport, setShowImport] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -317,6 +319,17 @@ function AppContent() {
               </button>
             )}
 
+            {isEditor && (
+              <button
+                onClick={() => setShowImport(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                title="Bulk import from Excel / CSV"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="hidden sm:inline">Import</span>
+              </button>
+            )}
+
             {/* User menu */}
             <div ref={userMenuRef} className="relative">
               <button
@@ -536,6 +549,15 @@ function AppContent() {
         onSuccess={() => showToast('Password changed successfully')}
         onError={(msg) => showToast(msg, 'error')}
       />
+
+      {isEditor && (
+        <ImportModal
+          isOpen={showImport}
+          onClose={() => setShowImport(false)}
+          onSuccess={() => fetchData()}
+          onError={(msg) => showToast(msg, 'error')}
+        />
+      )}
     </div>
   )
 }

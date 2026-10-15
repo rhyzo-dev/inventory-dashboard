@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Category } from '../lib/api';
 
 interface FilterOption {
   value: string;
@@ -17,18 +18,11 @@ interface FiltersProps {
   };
   onChange: (filters: any) => void;
   onReset: () => void;
+  categories: Category[];
 }
 
-// These would ideally come from an API or be constants; for now hardcoded based on typical inventory
-const CATEGORY_OPTIONS: FilterOption[] = [
-  { value: '', label: 'All Categories' },
-  { value: 'Lubricants', label: 'Lubricants' },
-  { value: 'Cleaning Supplies', label: 'Cleaning Supplies' },
-  { value: 'Safety Equipment', label: 'Safety Equipment' },
-  { value: 'Electrical', label: 'Electrical' },
-  { value: 'Mechanical', label: 'Mechanical' },
-  { value: 'Other', label: 'Other' }
-];
+// Status / view / sort are fixed server-side options. Category is driven by the
+// live list (whatever the user has created in the Categories panel).
 
 const STATUS_OPTIONS: FilterOption[] = [
   { value: '', label: 'All Status' },
@@ -54,12 +48,19 @@ const SORT_OPTIONS: FilterOption[] = [
   { value: 'created', label: 'Recently added' }
 ];
 
-export const Filters: React.FC<FiltersProps> = ({ filters, onChange, onReset }) => {
+export const Filters: React.FC<FiltersProps> = ({ filters, onChange, onReset, categories }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type, checked } = e.target;
     const newValue = type === 'checkbox' ? checked : value;
     onChange(prev => ({ ...prev, [name]: newValue, page: 1 })); // reset to page 1 on filter change
   };
+
+  // "All Categories" + every category the user has created, keyed by name (the
+  // value the server's `category = ?` filter and the item rows use).
+  const categoryOptions: FilterOption[] = [
+    { value: '', label: 'All Categories' },
+    ...categories.map((c) => ({ value: c.name, label: c.name })),
+  ];
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -87,7 +88,7 @@ export const Filters: React.FC<FiltersProps> = ({ filters, onChange, onReset }) 
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {CATEGORY_OPTIONS.map(opt => (
+              {categoryOptions.map(opt => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

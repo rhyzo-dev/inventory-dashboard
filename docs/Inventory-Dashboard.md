@@ -72,8 +72,7 @@ HTML/JS/CSS bundle + static assets
 
 ### 2.2 Key design decisions
 
-- **D1, not Turso.** The current system uses Cloudflare D1. (Earlier drafts described a
-  Turso + read-only + no-auth design; that is obsolete.)
+- **Cloudflare D1.** The current system uses D1 (SQLite) for every row.
 - **UUID primary keys.** D1 tables here use UUID keys (no rowId / auto-increment). IDs
   are generated server-side with `crypto.randomUUID()` and included in INSERTs. IDs are
   strings — never parse them as integers.
@@ -219,17 +218,17 @@ Date, Current Quantity* — the quantity cell is color-coded by stock status.
 | Manage users | ✅ | ❌ | ❌ |
 | Manage settings | ✅ | ❌ | ❌ |
 
-### 5.5 Initial access / default administrator
-- A seeded **`admin`** account ships with the app as a first-run / demo credential so the
-  project can be evaluated out of the box:
-  - Username: `admin`
-  - Password: `Admin@2024!`
-- This is a **known, public** credential. It is intended for demos and evaluation, **not**
-  for production. For a real deployment:
-  1. Sign in as `admin` and immediately change the password via **Change Password**
-     (see §6.9), or reset it in the **Users** panel.
-  2. Set a strong, unique `AUTH_SECRET` (rotating it invalidates all sessions — §7.4).
-  3. Delete the seeded `admin` account and work from your own admin user.
+### 5.5 Initial access / demo credential
+- **Public demo (isolated database).** Log in with `demo` / `Demo@2026!`. It is admin
+  **of the demo DB only** and physically cannot read production data. Reset it any time:
+  `npx wrangler d1 execute inventory-demo --remote --file=seeds/demo-data.sql`.
+- **Production (your plant).** The admin password is set and managed by the owner and is
+  **not published** in this repo or docs. A brand-new database has no users until one is
+  seeded — bootstrap the first admin out-of-band (a `users` row with a strong PBKDF2 hash)
+  before first login, then manage further users in the app.
+- The earlier first-run credential `admin` / `Admin@2024!` is **retired** (a demo-time
+  convenience; it is not valid on the rotated instance and is no longer the public login).
+  If you still see it in older notes, treat it as compromised.
 
 ## 6. User Flows
 
@@ -367,10 +366,10 @@ All services run within Cloudflare / Tigris free tiers for light internal use �
   `Permissions-Policy` (camera / microphone / geolocation disabled), and
   `Strict-Transport-Security` (1 year, includeSubDomains).
 - **Secrets** — operational secrets (`AUTH_SECRET`, Tigris keys) are never committed,
-  never in the docs, and never returned by the API. The exception is the **demo/first-run
-  credential** (`admin` / `Admin@2024!`), which is deliberately documented (§5.5) so the
-  project can be evaluated; it is *not* an operational secret and must be rotated for any
-  real deployment.
+  never in the docs, and never returned by the API. The only public credential is the
+  **isolated-demo login** (`demo` / `Demo@2026!`, §5.5), intentional and confined to the
+  demo database. The earlier `admin` / `Admin@2024!` first-run credential is **retired**;
+  treat it as compromised.
 - **Password** handling and **breach checking** per §5.2.
 - **Least-privilege roles** per §5.4; destructive actions (delete item/category/unit,
   user & settings management) are admin-only.
@@ -433,8 +432,7 @@ HTML/JS/CSS 静态资源
 ```
 
 ### 2.2 关键设计决策
-- **使用 D1，而非 Turso。** 当前系统采用 Cloudflare D1。（早期草稿描述的是
-  Turso + 只读 + 无鉴权的方案，已作废。）
+- **使用 Cloudflare D1。** 当前系统采用 Cloudflare D1（SQLite）存储全部行。
 - **UUID 主键。** D1 表使用 UUID 主键（无 rowId / 自增）。ID 在服务端用
   `crypto.randomUUID()` 生成并写入 INSERT。ID 是字符串——切勿按整数解析。
 - **单位按名称去规范化。** `consumable_item.unit` 存储单位的*名称*（TEXT），与
@@ -572,14 +570,15 @@ HTML/JS/CSS 静态资源
 | 管理用户 | ✅ | ❌ | ❌ |
 | 管理设置 | ✅ | ❌ | ❌ |
 
-### 5.5 初始访问 / 默认管理员
-- 应用内置一个 **`admin`** 账号作为首启 / 演示凭据，便于开箱即用地评估本项目：
-  - 用户名：`admin`
-  - 密码：`Admin@2024!`
-- 这是**已知、公开**的凭据，仅供演示与评估，**不**用于生产环境。真实部署请：
-  1. 以 `admin` 登录后立即通过**修改密码**（见 §6.9）改密，或在**用户**面板中重置；
-  2. 设置强且唯一的 `AUTH_SECRET`（轮换会使所有会话失效——见 §7.4）；
-  3. 删除该内置 `admin` 账号，改用自建的管理员账号。
+### 5.5 初始访问 / 演示凭据
+- **公开演示（独立数据库）。** 使用 `demo` / `Demo@2026!` 登录。它仅是**演示库**的管理员，
+  物理上无法读取生产数据。随时可重置：
+  `npx wrangler d1 execute inventory-demo --remote --file=seeds/demo-data.sql`。
+- **生产环境（贵方工厂）。** 管理员密码由所有者设置与管理，**不**在本仓库或文档中公开。
+  全新数据库在播种前没有任何用户——首次登录前请先在系统外引导第一个管理员（一条带强
+  PBKDF2 哈希的 `users` 记录），之后再在应用内管理其他用户。
+- 早期首启凭据 `admin` / `Admin@2024!` **已停用**（仅为演示期便利；在已轮换的环境中无效，
+  也不再是公开登录）。若仍在旧资料中看到它，请视为已泄露。
 
 ## 6. 用户流程
 
@@ -699,8 +698,8 @@ npx wrangler d1 execute inventory-dashboard --remote --file=migrations/0005_unit
   `Permissions-Policy`（禁用摄像头 / 麦克风 / 地理位置），以及
   `Strict-Transport-Security`（1 年，includeSubDomains）。
 - **密钥** —— 运行密钥（`AUTH_SECRET`、Tigris 密钥）从不提交、不写入文档、也不由 API 返回。
-  唯一的例外是**演示 / 首启凭据**（`admin` / `Admin@2024!`），它是被刻意记录在文档中
-  （§5.5）以便评估本项目的；它**不是**运行密钥，真实部署必须轮换。
+  唯一公开的凭据是**独立演示登录**（`demo` / `Demo@2026!`，§5.5），刻意且仅限演示数据库。
+  早期的 `admin` / `Admin@2024!` 首启凭据**已停用**；请视为已泄露。
 - **密码** 处理与**泄露校验** 见 §5.2。
 - **最小权限角色** 见 §5.4；破坏性操作（删除条目/类别/单位、用户与设置管理）仅 admin。
 - **使用保护** 防止删除仍被条目引用的类别或单位。

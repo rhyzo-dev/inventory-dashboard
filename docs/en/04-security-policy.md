@@ -25,15 +25,14 @@
   state (`.wrangler/`, `wrangler-state/`), and `*.db` / `*.sqlite`.
 
 ### ⚠️ History caveat (action before the public launch)
-A history audit found that **early commits did carry real values** (old Tigris keys, an
-`AUTH_SECRET`, and a pre-D1 Turso JWT) that were later removed from the working tree —
+A history audit found that **early commits did carry real values** (old Tigris keys, and
+an `AUTH_SECRET`) that were later removed from the working tree —
 but removal does not remove them from git **history**. Therefore:
 1. **Do not publish this private repo's history.** Publish the showcase as a **fresh
    repo seeded from the current (clean) tree** (one "Initial public snapshot" commit), or
    scrub history with `git filter-repo`/BFG and force-push first.
-2. **Rotate the still-live secrets:** `AUTH_SECRET` (invalidates all sessions — plan a
-   maintenance window), and **revoke the old Turso token** even though the app no longer
-   uses Turso. Confirm the old Tigris keys are already revoked.
+2. **Rotate the still-live secret:** `AUTH_SECRET` (invalidates all sessions — plan a
+   maintenance window). Confirm the old Tigris keys are already revoked.
 
 ## 3. Authentication
 
@@ -79,6 +78,5 @@ but removal does not remove them from git **history**. Therefore:
 | `AUTH_SECRET` | `wrangler pages secret put AUTH_SECRET` (per project) | **All sessions invalidated** |
 | Tigris keys | rotate in Tigris → `wrangler pages secret put` | in-flight image fetches fail until updated |
 | A user password | Users panel or `/api/auth/change-password` | that user must re-login |
-| Turso token (legacy) | revoke in the Turso dashboard | n/a (app uses D1 now) |
 
 Full operational steps are in [05 Deployment & Ops](05-deployment-ops.md).

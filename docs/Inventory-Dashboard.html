@@ -336,7 +336,7 @@ body.lang-en .two .en{display:revert} body.lang-zh .two .zh{display:revert}
       <h3><span class="en">Key design decisions</span><span class="zh">关键设计决策</span></h3>
       <div class="en">
         <ul>
-          <li><strong>D1, not Turso.</strong> The current system uses Cloudflare D1. (Earlier drafts describing a Turso + read-only + no-auth design are obsolete.)</li>
+          <li><strong>Cloudflare D1.</strong> The current system uses Cloudflare D1 (SQLite) for every row.</li>
           <li><strong>UUID primary keys.</strong> No rowId / auto-increment; IDs are generated server-side with <code>crypto.randomUUID()</code> and are strings — never parse them as integers.</li>
           <li><strong>Units denormalized by name.</strong> <code>consumable_item.unit</code> stores the unit's <em>name</em> (TEXT), the same pattern as <code>category</code>. Deleting a unit is blocked while any item references it.</li>
           <li><strong>Tigris has no object ACLs.</strong> Images are served through the same-origin proxy <code>GET /api/images/{key}</code> so the SPA's CSP (<code>img-src 'self' data: blob:</code>) can load them.</li>
@@ -345,7 +345,7 @@ body.lang-en .two .en{display:revert} body.lang-zh .two .zh{display:revert}
       </div>
       <div class="zh">
         <ul>
-          <li><strong>使用 D1，而非 Turso。</strong> 当前系统采用 Cloudflare D1。（早期草稿中“Turso + 只读 + 无鉴权”的方案已作废。）</li>
+          <li><strong>使用 Cloudflare D1。</strong> 当前系统采用 Cloudflare D1（SQLite）存储全部行。</li>
           <li><strong>UUID 主键。</strong> 无 rowId / 自增；ID 在服务端用 <code>crypto.randomUUID()</code> 生成，是字符串——切勿按整数解析。</li>
           <li><strong>单位按名称去规范化。</strong> <code>consumable_item.unit</code> 存储单位的<em>名称</em>（TEXT），与 <code>category</code> 相同；只要有条目引用，该单位即不可删除。</li>
           <li><strong>Tigris 无对象 ACL。</strong> 图片通过同源代理 <code>GET /api/images/{key}</code> 提供，使 SPA 的 CSP（<code>img-src 'self' data: blob:</code>）能加载它们。</li>
@@ -649,23 +649,23 @@ npx wrangler pages dev dist --d1=DB --vars-file=.env   <span class="cm"># 本地
       <div class="en">
         <ul>
           <li><strong>Response headers</strong> (applied by <code>functions/_middleware.ts</code> on every response): a strict same-origin <code>Content-Security-Policy</code> (<code>default-src 'self'</code>; <code>img-src 'self' data: blob:</code> — images load only via the same-origin <code>/api/images/</code> proxy plus client-side <code>data:</code>/<code>blob:</code> compression), <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, <code>Referrer-Policy: strict-origin-when-cross-origin</code>, <code>Permissions-Policy</code> (camera / microphone / geolocation disabled), and <code>Strict-Transport-Security</code> (1 year, includeSubDomains).</li>
-          <li><strong>Secrets</strong> — operational secrets (<code>AUTH_SECRET</code>, Tigris keys) are never committed, never in the docs, and never returned by the API. The deliberate exception is the <strong>demo / first-run credential</strong> (<code>admin</code> / <code>Admin@2024!</code>), which is documented so the project can be evaluated; it is <em>not</em> an operational secret and must be rotated for any real deployment.</li>
-          <li><strong>Default credential:</strong> a seeded <code>admin</code> account ships for demo / evaluation only. It is public by design — treat it as invalid in production: change the password, set a strong <code>AUTH_SECRET</code>, and delete the account.</li>
+          <li><strong>Secrets</strong> — operational secrets (<code>AUTH_SECRET</code>, Tigris keys) are never committed, never in the docs, and never returned by the API. The only public credential is the <strong>isolated-demo login</strong> (<code>demo</code> / <code>Demo@2026!</code>, §5.5), intentional and confined to the demo database. The earlier <code>admin</code> / <code>Admin@2024!</code> first-run credential is <strong>retired</strong>; treat it as compromised.</li>
+          <li><strong>Default credential:</strong> the public demo logs in as <code>demo</code> / <code>Demo@2026!</code> on an <strong>isolated demo database</strong> — it physically cannot reach production data. A fresh production database ships with no users; bootstrap the first admin out-of-band, set a strong <code>AUTH_SECRET</code>, and manage users in the app.</li>
           <li><strong>Least-privilege roles</strong> (§5); destructive actions (delete item / category / unit, user &amp; settings management) are admin-only.</li>
           <li><strong>In-use guards</strong> prevent deleting a category or unit that items still reference.</li>
           <li><strong>Rate limiting</strong> (§5.3) throttles login, inventory, and upload abuse.</li>
-          <li><strong>Cred-leak history:</strong> the Tigris keys that appeared in an earlier document are revoked and must <strong>not</strong> reappear — if a real operational secret surfaces again, treat it as compromised and rotate immediately. The seeded <code>admin</code> demo credential is a separate, deliberate value, not a leak.</li>
+          <li><strong>Cred-leak history:</strong> the Tigris keys that appeared in an earlier document are revoked and must <strong>not</strong> reappear — if a real operational secret surfaces again, treat it as compromised and rotate immediately. The isolated-demo login (<code>demo</code> / <code>Demo@2026!</code>) is a separate, deliberate value, not a leak; the earlier <code>admin</code> / <code>Admin@2024!</code> credential is retired.</li>
         </ul>
       </div>
       <div class="zh">
         <ul>
           <li><strong>响应头</strong>（由 <code>functions/_middleware.ts</code> 对每个响应统一设置）：严格的同源 <code>Content-Security-Policy</code>（<code>default-src 'self'</code>；<code>img-src 'self' data: blob:</code>——图片只经由同源的 <code>/api/images/</code> 代理、以及 <code>data:</code>/<code>blob:</code> 客户端压缩图加载）、<code>X-Frame-Options: DENY</code>、<code>X-Content-Type-Options: nosniff</code>、<code>Referrer-Policy: strict-origin-when-cross-origin</code>、<code>Permissions-Policy</code>（禁用摄像头 / 麦克风 / 地理位置）、以及 <code>Strict-Transport-Security</code>（1 年，includeSubDomains）。</li>
-          <li><strong>密钥</strong> —— 运行密钥（<code>AUTH_SECRET</code>、Tigris 密钥）从不提交、不写入文档、也不由 API 返回。唯一的例外是<strong>演示 / 首启凭据</strong>（<code>admin</code> / <code>Admin@2024!</code>），它被刻意记录在文档中以便评估；它<em>不是</em>运行密钥，真实部署必须轮换。</li>
-          <li><strong>默认凭据：</strong>内置 <code>admin</code> 账号仅用于演示 / 评估。它按设计是公开的——生产环境视为无效：请改密、设置强 <code>AUTH_SECRET</code>，并删除该账号。</li>
+          <li><strong>密钥</strong> —— 运行密钥（<code>AUTH_SECRET</code>、Tigris 密钥）从不提交、不写入文档、也不由 API 返回。唯一公开的凭据是<strong>独立演示登录</strong>（<code>demo</code> / <code>Demo@2026!</code>，§5.5），刻意且仅限演示数据库。早期的 <code>admin</code> / <code>Admin@2024!</code> 首启凭据<strong>已停用</strong>；请视为已泄露。</li>
+          <li><strong>默认凭据：</strong>公开演示使用 <code>demo</code> / <code>Demo@2026!</code> 登录<strong>独立演示库</strong>——物理上无法读取生产数据。全新的生产库不自带任何用户；请先在系统外引导第一个管理员，设置强 <code>AUTH_SECRET</code>，再在应用内管理用户。</li>
           <li><strong>最小权限角色</strong>（§5）；破坏性操作（删除条目 / 类别 / 单位、用户与设置管理）仅 admin。</li>
           <li><strong>使用保护</strong>防止删除仍被条目引用的类别或单位。</li>
           <li><strong>限流</strong>（§5.3）抑制登录、库存、上传的滥用。</li>
-          <li><strong>密钥泄露历史：</strong>早前文档中出现过的 Tigris 密钥已被吊销，<strong>不得</strong>再次出现——若真实的运行密钥再次出现，一律视为已泄露并立即轮换。内置的 <code>admin</code> 演示凭据是另当别论的刻意公开值，不属于泄露。</li>
+          <li><strong>密钥泄露历史：</strong>早前文档中出现过的 Tigris 密钥已被吊销，<strong>不得</strong>再次出现——若真实的运行密钥再次出现，一律视为已泄露并立即轮换。独立演示登录（<code>demo</code> / <code>Demo@2026!</code>）是另当别论的刻意公开值，不属于泄露；早期的 <code>admin</code> / <code>Admin@2024!</code> 凭据已停用。</li>
         </ul>
       </div>
     </section>

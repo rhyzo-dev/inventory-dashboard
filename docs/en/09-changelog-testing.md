@@ -35,6 +35,6 @@
 ## 3. Rollout checklist (before making the repo public)
 
 - [ ] Secret-scan the tree and confirm **no historical secrets ship** (publish a clean snapshot).
-- [ ] `AUTH_SECRET` rotated; old **Turso** token revoked; old Tigris keys confirmed dead.
+- [ ] `AUTH_SECRET` rotated; old Tigris keys confirmed dead.
 - [ ] Demo instance seeded (`seeds/demo-data.sql`) and reachable with the demo login.
 - [ ] License in place (all-rights-reserved statement).

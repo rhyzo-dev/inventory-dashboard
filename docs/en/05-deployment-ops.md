@@ -92,4 +92,4 @@ Because the private history contains past-committed secrets (see [04 §2](04-sec
   lines from every commit), force-push, then publish or mirror.
 
 Whichever you choose: verify the tree with a secret scan (`gitleaks` / `trufflehog`) before
-it is reachable, and finish by **rotating `AUTH_SECRET`** and **revoking the old Turso token**.
+it is reachable, and finish by **rotating `AUTH_SECRET`** and **confirming the old Tigris keys are revoked**.

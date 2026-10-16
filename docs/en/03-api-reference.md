@@ -30,6 +30,9 @@ JWT cookie auth.
 | GET | `/api/sku` | any | By-SKU totals + FEFO lots + optional min/max |
 | GET | `/api/stats` | any | aggregate counts (incl. `expired_count`, `expiring_soon_count`) |
 | POST | `/api/upload` | editor+ | upload an image to Tigris |
+| GET | `/api/images/{key}` | session | proxy that image from Tigris — the browser never holds S3 keys |
+| GET | `/api/settings` | any | read app settings (`company_name`, …) |
+| PUT | `/api/settings` | admin | update app settings (whitelisted keys only) |
 | GET | `/api/categories` · `POST` | any · editor+ | list / create categories |
 | PUT·DELETE | `/api/categories/:id` | editor+ · admin | update / delete (delete blocked while in use) |
 | GET | `/api/units` · `POST` | any · editor+ | list / create units |
@@ -41,6 +44,7 @@ JWT cookie auth.
 | GET | `/api/users/me` | any | current user |
 | GET·POST | `/api/users` | admin | list / create users (HIBP-checked) |
 | PUT·DELETE | `/api/users/:id` | admin | update role/lock/password · delete (not self) |
+| GET | `/api/debug/health` | ops | liveness + DB diagnostic — **hidden (404)** unless `DEBUG_TOKEN` / `DEBUG_PUBLIC=true` is set |
 
 The `company_name` setting is stored in `app_settings` and is admin-managed.
 
@@ -69,14 +73,24 @@ Query params: `sku`, `name` (required) + optional `bin_location`, `specification
 recently-updated). This powers the add-form's live warning.
 
 ### `POST /api/import`
+The client parses the spreadsheet locally (SheetJS) and posts plain JSON rows; each row
+may carry `rowNum` (its 1-based spreadsheet line) so the UI can point at exactly which
+line was skipped or errored.
+
+Request:
 ```jsonc
 { "dry_run": true,
   "rows": [ { "sku":"…", "name":"…", "quantity":10, "unit":"box",
-              "bin_location":"C1-01", "production_date":"…", "expiry_date":"…" } ] }
+              "bin_location":"C1-01", "production_date":"…", "expiry_date":"…",
+              "rowNum": 7 } ] }
 ```
-- `dry_run: true` → `{ "imported":n, "skipped_duplicated":n, "errors":[…], "would_import":true }`
-- commit → inserts in one atomic D1 batch; **duplicates are skipped and reported, never
-  overwritten**. Cap: 1000 rows.
+- `dry_run: true` → no writes; returns
+  `{ "dry_run":true, "results":[ { "index","sku","status","reason?" } ],
+     "summary": { "total","create","skip","error" } }`, where `status` ∈
+  `create` · `skip_duplicate` · `error`.
+- commit (`dry_run: false`) → inserts the create-eligible rows (one atomic insert each);
+  **duplicates are skipped and reported, never overwritten.** Returns
+  `{ "dry_run":false, "created", "skipped", "errors", "message" }`. Cap: 1000 rows.
 
 ### `GET /api/stats`
 ```jsonc

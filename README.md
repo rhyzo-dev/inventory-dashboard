@@ -4,10 +4,10 @@ A role-based inventory dashboard built with React, TypeScript, and Vite, deploye
 Cloudflare Pages. Data is stored in Cloudflare D1 (SQLite, UUID primary keys) and
 images in Tigris Data (S3-compatible object storage).
 
-> 📘 **Full team documentation** (architecture, data model, API reference, UX flow,
-> security & data policy, operations) — English + Chinese:
-> [`docs/Inventory-Dashboard.md`](docs/Inventory-Dashboard.md).
-> This README is a quick start; the doc is the source of truth.
+> 📘 **Documentation pack** (architecture + ADRs, data model, API, security & data
+> policy, deployment/ops, UX schematics, operator guide, glossary) — English + 中文:
+> [`docs/README.md`](docs/README.md). The legacy single doc [`docs/Inventory-Dashboard.md`](docs/Inventory-Dashboard.md)
+> is kept for reference; the new pack is the source of truth. This README is a quick start.
 
 ## Features
 
@@ -124,6 +124,7 @@ Set the secrets/vars above, and every push rebuilds.
 | POST | /api/upload | editor+ | Upload image to Tigris |
 | GET | /api/images/:key | public | Serve an image from Tigris (proxied; Tigris has no public ACLs) |
 | GET | /api/stats | required | Aggregate statistics |
+| GET | /api/sku | required | By-SKU totals + FEFO lots + optional min/max |
 | GET | /api/settings | required | Get app settings (`company_name`) |
 | PUT | /api/settings | admin | Update app settings |
 | GET | /api/export | required | CSV / XLSX export |
@@ -158,8 +159,16 @@ inventory-dashboard/
 │   ├── 0002_auth_tables.sql      # users, refresh_tokens, login_attempts
 │   ├── 0003_app_settings.sql     # app_settings
 │   ├── 0004_remove_sku_unique.sql
-│   └── 0005_units.sql            # units table + item.unit column + default units
-└── docs/Inventory-Dashboard.md    # Full bilingual team documentation
+│   ├── 0005_units.sql            # units table + item.unit column + default units
+│   └── 0006_sku.sql             # thin per-SKU thresholds
+├── seeds/
+│   ├── demo-data.sql           # demo-instance seed: demo user + sample data (idempotent reset)
+│   └── README.md               # two-instance (prod + demo) setup & reset
+├── docs/
+│   ├── README.md               # documentation pack index (EN + 中文)
+│   ├── en/                     # 01–09: architecture, data model, API, security, ops, UX, SOP, glossary, changelog
+│   └── zh/                     # operator guide + glossary (中文)
+└── LICENSE                     # all-rights-reserved (demonstration / portfolio)
 ```
 
 ## Database Migrations (D1)
@@ -187,20 +196,36 @@ npx wrangler d1 execute inventory-dashboard --remote --file=migrations/NNNN_name
 
 ## Access & Credentials
 
-- **Default administrator (first-run / demo).** A seeded `admin` account ships with the
-  app so the project can be evaluated out of the box:
-  - Username: `admin`
-  - Password: `Admin@2024!`
-- **Rotate it.** This is a known, public credential intended for demos. After first
-  sign-in, change it via the app's **Change Password** menu (any user can change their
-  own password; the request revokes the old session's refresh token). For any real
-  deployment, do not use the shipped default: create your own admin, rotate `AUTH_SECRET`,
-  and delete the seeded account.
+The system runs as **two isolated instances** that share code but use separate D1
+databases, Tigris buckets, and secrets:
+
+- **Public demo (the showcase).** A separate instance (`inventory-dashboard-demo`) is
+  seeded with a sample dataset via [`seeds/demo-data.sql`](seeds/demo-data.sql) and has a
+  documented, low-risk login so the public repo is explorable:
+  - Username: `demo` · Password: `Demo@2026!`
+  - It is an admin **of the demo database only** and physically cannot read production
+    data. Reset it any time with `npx wrangler d1 execute inventory-demo --remote
+    --file=seeds/demo-data.sql`. See [`seeds/README.md`](seeds/README.md).
+- **Production (your plant).** Access is **private**. The admin password is set and
+  managed by the owner and is **not published** in this repo or docs. A brand-new
+  database has no users until one is seeded — bootstrap the first admin out-of-band
+  (a `users` row with a strong PBKDF2 hash) before first login, then create further users
+  in the app.
+
+> The earlier first-run credential `admin` / `Admin@2024!` is **retired**: it was a
+> demo-time convenience, it is not valid on the rotated production instance, and it is no
+> longer the public demo login (that is now `demo` / `Demo@2026!` on the isolated demo DB).
 - **Roles.** Admin (full control) · Editor (items, categories, units — no deletes/users) ·
   Viewer (read-only). Admins manage further users in the **Users** panel.
 - **Passwords** are hashed with PBKDF2-SHA256 (100k iterations, 16-byte salt), validated
   against a strength policy and a breach list (HIBP). Rotating `AUTH_SECRET` invalidates
   all sessions.
+
+## License
+
+All rights reserved — this build is published for **demonstration and portfolio
+purposes**. See [`LICENSE`](LICENSE) for the full notice. Do not reuse this code or its
+documentation in a product or client work without a separate written license.
 
 ---
 

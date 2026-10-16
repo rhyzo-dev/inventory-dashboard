@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inventory Dashboard — Build & Design Overview</title>
+<meta name="description" content="A multi-lot plant inventory tool: architecture, decisions, UX schematics, and security posture. Vibe-coded end to end, and documented like a client handover." />
+<style>
+  :root{
+    --ground:#f4f6f8; --surface:#ffffff; --surface-2:#eef1f5;
+    --ink:#141a22; --muted:#5a6573; --faint:#8b95a3;
+    --line:#dde3ea; --line-2:#c9d2dc;
+    --accent:#0b6fd4; --accent-soft:#e3f0fc;
+    --ok:#1a9c66; --ok-bg:#e6f6ef; --warn:#c07d16; --warn-bg:#fbeed6;
+    --bad:#cf3a31; --bad-bg:#f8e2e0;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
+    --maxw:1120px; --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ground:#0d111b; --surface:#151b27; --surface-2:#1d2534;
+      --ink:#e7ecf4; --muted:#9aa6b8; --faint:#6b7688;
+      --line:#273243; --line-2:#334055;
+      --accent:#4aa6ff; --accent-soft:#12314f;
+      --ok:#37d19b; --ok-bg:#0f2f27; --warn:#f0ad42; --warn-bg:#2e230c;
+      --bad:#f0655d; --bad-bg:#331815;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 22px}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:600}
+  h1,h2,h3{line-height:1.15; font-weight:700; letter-spacing:-.01em; text-wrap:balance}
+  h1{font-size:clamp(30px,5vw,46px); margin:.2em 0 .4em}
+  h2{font-size:clamp(22px,3vw,30px); margin:0}
+  h3{font-size:18px; margin:0}
+  p{color:var(--muted); margin:.5em 0}
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:2px 5px; border-radius:5px; color:var(--ink)}
+  .muted{color:var(--muted)}
+  .muted, .faint{color:var(--muted)}
+
+  /* top nav */
+  nav.top{position:sticky; top:0; z-index:20; background:color-mix(in srgb, var(--ground) 88%, transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--line)}
+  nav.top .wrap{display:flex; align-items:center; justify-content:space-between; height:54px}
+  .brand{font-family:var(--mono); font-weight:700; font-size:14px; letter-spacing:.02em}
+  .brand .dot{color:var(--accent)}
+  nav.top .links{display:flex; gap:18px; font-size:14px}
+  nav.top .links a{color:var(--muted)}
+  @media (max-width:720px){ nav.top .links{display:none} }
+
+  /* masthead */
+  header.mast{padding:64px 0 30px; border-bottom:1px solid var(--line)}
+  header.mast .kicker{font-family:var(--mono); font-size:13px; color:var(--accent); letter-spacing:.06em}
+  .badges{display:flex; flex-wrap:wrap; gap:8px; margin-top:18px}
+  .badge{font-family:var(--mono); font-size:12px; padding:5px 10px; border:1px solid var(--line-2); border-radius:999px; color:var(--muted); background:var(--surface)}
+  .badge.solid{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .lede{font-size:clamp(17px,2.2vw,20px); color:var(--muted); max-width:60ch; margin:18px 0 0}
+
+  .demo-callout{margin-top:26px; display:flex; gap:14px; flex-wrap:wrap; align-items:center;
+    background:var(--accent-soft); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius:var(--radius); padding:14px 18px}
+  .demo-callout .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--accent)}
+  .demo-callout .creds{font-family:var(--mono); font-size:15px; font-weight:600}
+  .demo-callout .creds .k{color:var(--muted); font-weight:400}
+
+  section{padding:48px 0; border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:0}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin-bottom:8px}
+  .sec-head .num{font-family:var(--mono); color:var(--faint); font-size:14px}
+  .sec-sub{color:var(--muted); max-width:64ch; margin:0 0 26px}
+
+  .grid{display:grid; gap:16px}
+  .grid.c2{grid-template-columns:repeat(2,1fr)}
+  .grid.c3{grid-template-columns:repeat(3,1fr)}
+  .grid.c4{grid-template-columns:repeat(4,1fr)}
+  @media (max-width:820px){ .grid.c3,.grid.c4{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:520px){ .grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr} }
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px}
+  .card h3{margin-bottom:6px}
+  .card p{margin:4px 0 0; font-size:14.5px}
+
+  /* problem / case study */
+  .flowline{display:flex; align-items:stretch; gap:0; flex-wrap:wrap; margin-top:8px}
+  .flowline .step{flex:1 1 160px; padding:4px 16px 4px 0}
+  .flowline .arrow{align-self:center; color:var(--faint); font-size:20px; padding:0 8px}
+  .flowline .step .t{font-weight:600; font-size:15px}
+  .flowline .step .d{font-size:13.5px; color:var(--muted)}
+
+  /* architecture diagram */
+  .arch{display:grid; grid-template-columns:1fr; gap:14px; margin-top:6px}
+  .plane{border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); padding:16px 18px}
+  .plane .pt{font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin-bottom:8px}
+  .plane .items{display:flex; flex-wrap:wrap; gap:8px}
+  .pill{font-family:var(--mono); font-size:12px; padding:4px 9px; border-radius:7px; background:var(--surface-2); color:var(--ink); border:1px solid var(--line)}
+  .arrowv{text-align:center; color:var(--faint); font-size:18px; line-height:1}
+  .anno{font-size:13px; color:var(--muted); margin:6px 0 0}
+
+  /* ADR list */
+  .adr{list-style:none; margin:0; padding:0; counter-reset:adr}
+  .adr li{counter-increment:adr; position:relative; padding:14px 0 14px 54px; border-bottom:1px dashed var(--line)}
+  .adr li:last-child{border-bottom:0}
+  .adr li::before{content:"ADR-" counter(adr); position:absolute; left:0; top:16px; font-family:var(--mono); font-size:11px; font-weight:700; color:var(--accent); border:1px solid var(--line-2); border-radius:6px; padding:2px 6px; background:var(--surface)}
+  .adr li b{display:block; color:var(--ink); font-size:15px}
+  .adr li span{font-size:14px; color:var(--muted)}
+
+  /* data model */
+  .keybox{background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:14px 16px; font-size:14.5px; color:var(--muted)}
+  .keybox b{color:var(--ink)}
+  .keybox code{background:var(--surface)}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px}
+  .chip{font-family:var(--mono); font-size:12px; padding:3px 8px; border-radius:6px; border:1px solid var(--line-2); color:var(--ink); background:var(--surface)}
+
+  /* state chips (semantic) */
+  .states{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px}
+  @media (max-width:520px){ .states{grid-template-columns:1fr} }
+  .state{display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--surface); font-size:14px}
+  .swatch{width:12px; height:12px; border-radius:4px; flex:none}
+  .state .n{font-family:var(--mono); font-size:12px; color:var(--muted)}
+
+  /* page schematics */
+  .screens{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:6px}
+  @media (max-width:820px){ .screens{grid-template-columns:repeat(2,1fr)} }
+  @media (max-width:520px){ .screens{grid-template-columns:1fr} }
+  .screen{border:1px solid var(--line); border-radius:10px; background:var(--surface); overflow:hidden}
+  .screen .bar{height:8px; background:var(--surface-2)}
+  .screen .body{padding:12px; font-size:12.5px; color:var(--muted)}
+  .screen .ttl{font-weight:600; color:var(--ink); font-size:13px; margin-bottom:6px}
+  .screen .mock{display:flex; flex-direction:column; gap:5px}
+  .screen .mock .row{height:8px; border-radius:4px; background:var(--surface-2)}
+  .screen .mock .row.s{width:60%}
+  .screen .mock .row.m{width:80%}
+  .screen .mock .row.x{width:45%}
+
+  /* table */
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px}
+  table.data{border-collapse:collapse; width:100%; min-width:520px; font-size:14px}
+  table.data th,table.data td{text-align:left; padding:10px 12px; border-bottom:1px solid var(--line)}
+  table.data th{font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:var(--surface-2)}
+  table.data tr:last-child td{border-bottom:0}
+  table.data td.mono, table.data code{font-family:var(--mono); font-size:12.5px}
+
+  /* security */
+  .sec2col{display:grid; grid-template-columns:1.1fr .9fr; gap:24px}
+  @media (max-width:820px){ .sec2col{grid-template-columns:1fr} }
+  .list{list-style:none; margin:0; padding:0}
+  .list li{padding:9px 0 9px 26px; position:relative; font-size:14.5px; color:var(--muted); border-bottom:1px solid var(--line)}
+  .list li:last-child{border-bottom:0}
+  .list li::before{content:""; position:absolute; left:4px; top:14px; width:8px; height:8px; border-radius:2px; background:var(--accent)}
+  .list li b{color:var(--ink)}
+
+  footer{padding:36px 0 60px; font-size:13px; color:var(--faint)}
+  footer .lic{font-family:var(--mono)}
+  .tag{display:inline-block; font-family:var(--mono); font-size:11px; color:var(--accent); border:1px solid color-mix(in srgb,var(--accent) 40%,transparent); border-radius:6px; padding:2px 7px; margin-left:8px; vertical-align:middle}
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <div class="brand">Inventory<span class="dot">·</span>Dashboard</div>
+    <div class="links">
+      <a href="#problem">Overview</a>
+      <a href="#arch">Architecture</a>
+      <a href="#data">Data</a>
+      <a href="#ux">UX &amp; Schematics</a>
+      <a href="#api">API</a>
+      <a href="#sec">Security</a>
+    </div>
+  </div>
+</nav>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="kicker">vibe-coded end to end · documented like a client handover</div>
+    <h1>Plant Inventory, Lots-First</h1>
+    <p class="lede">A consumable-inventory tool for a manufacturing plant: track which lots of each SKU
+      are on hand, where they sit, and when they expire — and issue the soonest-expiring lot first
+      (<b>FEFO</b>). Built, shipped, and documented in one pass.</p>
+    <div class="badges">
+      <span class="badge solid">React 18 · TypeScript · Vite</span>
+      <span class="badge">Cloudflare Pages Functions</span>
+      <span class="badge">D1 (SQLite)</span>
+      <span class="badge">Tigris (S3)</span>
+      <span class="badge">Zero-DB-Cache Ops</span>
+      <span class="badge">All rights reserved</span>
+    </div>
+    <div class="demo-callout">
+      <div>
+        <div class="lbl">Public demo (isolated instance)</div>
+        <div class="creds"><span class="k">login</span> demo&nbsp;/&nbsp;Demo@2026!</div>
+      </div>
+      <div class="anno" style="margin:0;max-width:34ch">A seeded sample dataset with no link to production.
+        Add, import, delete — it can't read the plant's real data.</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="problem">
+    <div class="sec-head"><span class="num">01</span><h2>What it is, and why it's interesting</h2></div>
+    <p class="sec-sub">Most inventory UIs treat a line as one product. A plant doesn't work that way: the same
+      SKU arrives in batches with different bins, manufacturing dates and expiry dates. The interesting
+      problems are the little ones — dedup, FEFO, expiry state — done <em>right</em> across every surface.</p>
+    <div class="flowline">
+      <div class="step"><div class="t">The problem</div><div class="d">Lots, not rows. Same SKU, many expiries. Stock runs out, or quietly goes bad.</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="t">The model</div><div class="d">SKU is the catalog; the <b>lot</b> is the row. Non-unique SKU on purpose.</div></div>
+      <div class="arrow">→</div>
+      <div class="step"><div class="t">The payoff</div><div class="d">Catch duplicates, see what's expiring, and always know which lot to issue first.</div></div>
+    </div>
+  </section>
+
+  <section id="arch">
+    <div class="sec-head"><span class="num">02</span><h2>Architecture</h2></div>
+    <p class="sec-sub">Three thin planes: a static SPA, a folder of edge functions, and managed state. No Node server,
+      no pool to run — one deploy command ships the whole thing.</p>
+
+    <div class="arch">
+      <div class="plane">
+        <div class="pt">Browser — React SPA</div>
+        <div class="items">
+          <span class="pill">Vite · Tailwind v3</span>
+          <span class="pill">filters · add/import · by-SKU</span>
+          <span class="pill">SheetJS parses imports client-side</span>
+        </div>
+      </div>
+      <div class="arrowv">↓&nbsp; <span style="font-family:var(--mono);font-size:12px">/api/* · JWT cookie</span></div>
+      <div class="plane">
+        <div class="pt">Cloudflare Pages Functions — the API</div>
+        <div class="items">
+          <span class="pill">one file per route</span>
+          <span class="pill">inventory · import · export · upload · stats · sku</span>
+          <span class="pill">auth · users · categories · units · settings</span>
+          <span class="pill">image proxy · security-headers middleware</span>
+        </div>
+        <p class="anno">Secrets (from the dashboard, never in git): <code>AUTH_SECRET</code> · Tigris keys.</p>
+      </div>
+      <div class="arrowv">↓</div>
+      <div class="plane">
+        <div class="pt">State</div>
+        <div class="items">
+          <span class="pill">D1 (SQLite) — every row</span>
+          <span class="pill">Tigris — item photos (private bucket)</span>
+          <span class="pill">KV — per-IP rate limiting</span>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">The decisions that make it what it is</h3>
+    <ol class="adr" style="margin-top:12px">
+      <li><b>School, not rows — SKU is non-unique.</b><span>One SKU carries many lots (bins × expiry). The <em>lot</em> is the row; dedup keys on six fields, not the SKU.</span></li>
+      <li><b>Expired ≠ Expiring soon.</b><span>One server-side day boundary (<code>date('now')</code>) means every card, filter and row agrees: past = Expired, next 30d = Expiring soon.</span></li>
+      <li><b>Import is parsed in the browser; the endpoint stays thin.</b><span>SheetJS runs locally; the API gets plain rows and does one atomic batch — duplicates skipped, never overwritten.</span></li>
+      <li><b>Dual-layer dedup.</b><span>The UI pre-warns; the server still returns <code>409</code>. “Add anyway” is a deliberate override, so the guard can't be bypassed.</span></li>
+      <li><b>UUID keys, generated on the server.</b><span>D1 UUID tables have no auto-increment; we mint the ID on INSERT instead of reading a rowId that isn't there.</span></li>
+      <li><b>Images behind a proxy, bucket kept private.</b><span>The browser never holds object-storage credentials.</span></li>
+      <li><b>Tailwind v3, not v4 (in this stack).</b><span>v4's ESM-only PostCSS plugin silently fails to scan source under CJS — pinned v3 for a build that actually emits color.</span></li>
+      <li><b>Two isolated instances: production + public demo.</b><span>Same code, different D1 / Tigris / secrets. The demo can't touch the plant's real data.</span></li>
+    </ol>
+  </section>
+
+  <section id="data">
+    <div class="sec-head"><span class="num">03</span><h2>Data model</h2></div>
+    <p class="sec-sub">The whole system hangs off one idea: a <b>lot</b> is identified by six fields. That single rule
+      drives dedup, bulk-import, and the FEFO view.</p>
+    <div class="keybox">
+      <b>The lot key</b> — two rows are the "same lot" only when all six match
+      (empty matching empty, via <code>COALESCE</code>):
+      <div class="chips">
+        <span class="chip">SKU</span><span class="chip">name</span><span class="chip">bin_location</span>
+        <span class="chip">specification</span><span class="chip">production_date</span><span class="chip">expiry_date</span>
+      </div>
+    </div>
+    <div class="grid c2" style="margin-top:16px">
+      <div class="card">
+        <h3>Tables <span class="tag">D1</span></h3>
+        <p><code>consumable_item</code> is the lot. <code>users</code> + <code>refresh_tokens</code> +
+          <code>login_attempts</code> run auth. <code>categories</code> / <code>units</code> are managed lists
+          (referenced <em>by name</em>). A thin <code>sku</code> table holds optional per-SKU min/max.
+          Six migrations (0001–0006), applied in order.</p>
+      </div>
+      <div class="card">
+        <h3>State the dashboard reports</h3>
+        <div class="states">
+          <div class="state"><span class="swatch" style="background:var(--ok)"></span><div><b>Adequate</b> <span class="n">healthy</span></div></div>
+          <div class="state"><span class="swatch" style="background:var(--warn)"></span><div><b>Low stock</b> <span class="n">qty &lt; min</span></div></div>
+          <div class="state"><span class="swatch" style="background:var(--bad)"></span><div><b>Out of stock</b> <span class="n">qty = 0</span></div></div>
+          <div class="state"><span class="swatch" style="background:var(--bad)"></span><div><b>Expired</b> <span class="n">date &lt; now</span></div></div>
+          <div class="state"><span class="swatch" style="background:var(--warn)"></span><div><b>Expiring soon</b> <span class="n">now…now+30d</span></div></div>
+          <div class="state"><span class="swatch" style="background:var(--accent)"></span><div><b>FEFO order</b> <span class="n">soonest lot first</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ux">
+    <div class="sec-head"><span class="num">04</span><h2>UX &amp; page schematics</h2></div>
+    <p class="sec-sub">The app is scanned, not read: what needs a human to act on is the loudest thing on screen.
+      These are the main screens and how they connect — the "click-through."</p>
+
+    <div class="screens">
+      <div class="screen"><div class="bar"></div><div class="body"><div class="ttl">Login</div>
+        <div class="mock"><div class="row m"></div><div class="row m"></div><div class="row s"></div></div></div></div>
+      <div class="screen"><div class="bar"></div><div class="body"><div class="ttl">Dashboard</div>
+        <div class="mock"><div class="row x"></div><div class="row m"></div><div class="row m"></div><div class="row s"></div></div></div></div>
+      <div class="screen"><div class="bar"></div><div class="body"><div class="ttl">Add / Edit</div>
+        <div class="mock"><div class="row m"></div><div class="row m"></div><div class="row x"></div><div class="row m" style="background:var(--warn-bg)"></div></div></div></div>
+      <div class="screen"><div class="bar"></div><div class="body"><div class="ttl">Bulk import</div>
+        <div class="mock"><div class="row m"></div><div class="row s"></div><div class="row m"></div><div class="row x" style="background:var(--ok-bg)"></div></div></div></div>
+      <div class="screen"><div class="bar"></div><div class="body"><div class="ttl">By-SKU · FEFO</div>
+        <div class="mock"><div class="row m"></div><div class="row s"></div><div class="row m"></div><div class="row x"></div></div></div></div>
+    </div>
+
+    <div class="grid c3" style="margin-top:20px">
+      <div class="card"><h3>Attention-first</h3><p>Expired and Out of stock are red; Low and Expiring-soon are amber;
+        Adequate is calm green. One glance says what to do.</p></div>
+      <div class="card"><h3>Warn early, block for real</h3><p>Re-entering an existing lot flags a live warning with the
+        matching lots; the save is blocked unless you tick “Add anyway.”</p></div>
+      <div class="card"><h3>Two lenses, one data set</h3><p>Lot-level table for “what's in the bin”; the By-SKU view for
+        “total on hand + which lot do I issue first (FEFO).”</p></div>
+      <div class="card"><h3>Import that's safe to re-run</h3><p>Downloadable template, dry-run preview, and a commit that
+        skips duplicates — so uploading the same file twice won't create double lots.</p></div>
+      <div class="card"><h3>Your own categories &amp; units</h3><p>Newly-created categories appear in the filter dropdowns
+        automatically; deletions are blocked while still in use.</p></div>
+      <div class="card"><h3>Bilingual</h3><p>Docs ship in English and 中文 so the plant's Chinese-speaking operators
+        have the user guide and glossary in their language.</p></div>
+    </div>
+  </section>
+
+  <section id="api">
+    <div class="sec-head"><span class="num">05</span><h2>API at a glance</h2></div>
+    <p class="sec-sub">A thin REST layer over D1 + Tigris with JWT cookie auth. Full reference in
+      <a href="en/03-api-reference.md">the API doc</a>.</p>
+    <div class="tbl-wrap">
+      <table class="data">
+        <thead><tr><th>Method</th><th>Path</th><th>Access</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GET</td><td class="mono">/api/inventory</td><td>any</td><td>list lots (filter, search, page)</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/inventory</td><td>editor+</td><td>create a lot — <code>409</code> on duplicate</td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/inventory/duplicates</td><td>any</td><td>six-field lot pre-check</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/import</td><td>editor+</td><td>bulk import (atomic; skip-duplicates)</td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/sku</td><td>any</td><td>By-SKU totals + FEFO + min/max</td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/stats</td><td>any</td><td>counts incl. expired vs expiring-soon</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/upload</td><td>editor+</td><td>image → Tigris</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/auth/login</td><td>none</td><td>rate-limited login</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sec">
+    <div class="sec-head"><span class="num">06</span><h2>Security posture</h2></div>
+    <p class="sec-sub">The code is public; the plant's data is not. That boundary is the whole design.</p>
+    <div class="sec2col">
+      <ul class="list">
+        <li><b>Two isolated instances.</b> Production and the public demo run the same code against <b>different</b> D1 databases, Tigris buckets and secrets — the demo physically can't read your data.</li>
+        <li><b>Secrets stay out of git.</b> <code>AUTH_SECRET</code> and Tigris keys live in Cloudflare Pages Secrets; <code>wrangler.toml</code> holds identifiers only. <code>.gitignore</code> guards local secret files.</li>
+        <li><b>Strong auth.</b> PBKDF2-SHA256 (100k), JWT + revocable refresh tokens, three roles, HIBP breach checks, per-IP rate limiting and lockout.</li>
+        <li><b>Private object storage.</b> Photos are served through a proxy; the browser never holds Tigris keys.</li>
+        <li><b>Sample data only, publicly.</b> The demo DB and repo carry a neutral sample set — no real suppliers, prices or PII.</li>
+      </ul>
+      <div class="card" style="align-self:start">
+        <h3>Pre-publish checklist</h3>
+        <p>Because early private commits carried secret <em>values</em> that were later removed, the public
+          repo is published as a <b>clean snapshot</b> (no private history), <code>AUTH_SECRET</code> is rotated,
+          and the legacy Turso token is revoked. Details in
+          <a href="en/05-deployment-ops.md">Deployment &amp; Ops</a> and
+          <a href="en/04-security-policy.md">Security &amp; Access Policy</a>.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span class="lic">All rights reserved</span> — this build is published for demonstration and portfolio
+    purposes. Full handover pack: <a href="README.md">docs/README.md</a> · license: <a href="../LICENSE">LICENSE</a>.
+  </div>
+</footer>
+
+</body>
+</html>

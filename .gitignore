@@ -10,6 +10,15 @@ build/
 .env.local
 .env.production.local
 
+# Wrangler local dev secrets (AUTH_SECRET, Tigris keys, etc.) — never commit
+.dev.vars
+.dev.vars.*
+
+# Local secret/credential dumps
+*.pem
+*.key
+secrets/
+
 # IDE
 .vscode/
 .idea/

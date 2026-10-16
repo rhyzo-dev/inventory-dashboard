@@ -25,8 +25,10 @@ const DEFAULT_BASE_URL = 'https://inventory-dashboard-7qh.pages.dev'
 const ARGV = process.argv.slice(2)
 const BASE_URL = (ARGV.find(a => a.startsWith('--base-url='))?.split('=')[1]) || DEFAULT_BASE_URL
 const DEBUG_TOKEN = (ARGV.find(a => a.startsWith('--token='))?.split('=')[1]) || ''
-const USERNAME = 'admin'
-const PASSWORD = 'Admin@2024!'
+const USERNAME = process.env.TEST_USERNAME || ARGV.find(a => a.startsWith('--username='))?.split('=')[1] || 'admin'
+// Never hardcode a real password in the repo. Supply it via TEST_PASSWORD env or --password=.
+// (The old demo password is retired — leave this empty unless you pass one.)
+const PASSWORD = process.env.TEST_PASSWORD || ARGV.find(a => a.startsWith('--password='))?.split('=')[1] || ''
 
 // Strip leading slash for consistent joining
 const base = BASE_URL.replace(/\/$/, '')

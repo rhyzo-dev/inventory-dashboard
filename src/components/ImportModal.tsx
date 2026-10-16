@@ -29,6 +29,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
   const [error, setError] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [finalResult, setFinalResult] = useState<ImportResult | null>(null)
+  const [onlyProblems, setOnlyProblems] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
@@ -41,8 +42,13 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
       }
     : null
 
+  // Rows that did NOT import (duplicates or validation errors), paired with their
+  // real spreadsheet row number so the user can find them in their own file.
+  const problemRows = plan ? plan.filter(p => p.status !== 'create') : []
+  const rowNum = (p: ImportPlanRow) => rows[p.index]?.rowNum ?? (p.index + 1)
+
   const reset = () => {
-    setRows([]); setPlan(null); setFileName(''); setError(null); setPhase('idle'); setFinalResult(null)
+    setRows([]); setPlan(null); setFileName(''); setError(null); setPhase('idle'); setFinalResult(null); setOnlyProblems(false)
   }
   const close = () => { reset(); onClose() }
 
@@ -173,21 +179,28 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
                 Re-running this file is safe.
               </p>
 
+              {problemRows.length > 0 && (
+                <label className="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                  <input type="checkbox" checked={onlyProblems} onChange={e => setOnlyProblems(e.target.checked)} className="accent-blue-600" />
+                  Show only skipped / errored rows ({problemRows.length})
+                </label>
+              )}
+
               <div className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="max-h-72 overflow-y-auto">
                   <table className="min-w-full text-sm">
                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">
                       <tr>
-                        <th className="px-3 py-2 text-left w-10">#</th>
+                        <th className="px-3 py-2 text-left w-12">Row</th>
                         <th className="px-3 py-2 text-left">SKU</th>
                         <th className="px-3 py-2 text-left">Status</th>
                         <th className="px-3 py-2 text-left">Reason</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {plan.map(p => (
+                      {(onlyProblems ? problemRows : plan).map(p => (
                         <tr key={p.index} className={p.status === 'error' ? 'bg-red-50' : p.status === 'skip_duplicate' ? 'bg-amber-50' : ''}>
-                          <td className="px-3 py-2 text-gray-400 tabular-nums">{p.index + 1}</td>
+                          <td className="px-3 py-2 text-gray-400 tabular-nums">{rowNum(p)}</td>
                           <td className="px-3 py-2 font-medium text-gray-800">{p.sku}</td>
                           <td className="px-3 py-2"><StatusBadge status={p.status} /></td>
                           <td className="px-3 py-2 text-gray-600">{p.reason || ''}</td>
@@ -230,6 +243,24 @@ export const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onSuc
               <p className="mt-1 text-sm text-gray-500">
                 {finalResult.created ?? 0} added · {finalResult.skipped ?? 0} skipped · {finalResult.errors ?? 0} errors
               </p>
+
+              {problemRows.length > 0 && (
+                <div className="mt-5 mx-auto max-w-md text-left">
+                  <p className="text-sm font-medium text-gray-700 mb-2">
+                    {problemRows.length} row{problemRows.length === 1 ? '' : 's'} not imported — fix these in your sheet, then re-run:
+                  </p>
+                  <ul className="max-h-48 overflow-y-auto space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+                    {problemRows.map(p => (
+                      <li key={p.index} className="leading-snug">
+                        <span className="font-mono text-gray-400">Row {rowNum(p)}</span>
+                        <span className="font-medium text-gray-800"> · {p.sku}</span>
+                        <span className="text-gray-600"> — {p.reason || (p.status === 'skip_duplicate' ? 'Duplicate — same lot already in the list' : 'Invalid')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <button
                 onClick={close}
                 className="mt-6 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"

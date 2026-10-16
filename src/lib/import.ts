@@ -21,6 +21,8 @@ export interface ImportRow {
   production_date: string
   expiry_date: string
   description: string
+  /** 1-based spreadsheet row number (header = row 1), so the UI can point at the exact line in the user's file. */
+  rowNum: number
 }
 
 interface ColumnDef {
@@ -42,8 +44,8 @@ export const COLUMNS: ColumnDef[] = [
   { key: 'min_threshold', label: 'Min Threshold', example: '20' },
   { key: 'max_threshold', label: 'Max Threshold', example: '300' },
   { key: 'bin_location', label: 'Bin Location', example: 'A-3-12' },
-  { key: 'production_date', label: 'Production Date', example: '2025-01-01', hint: 'YYYY-MM-DD or blank' },
-  { key: 'expiry_date', label: 'Expiry Date', example: '2027-01-01', hint: 'YYYY-MM-DD or blank' },
+  { key: 'production_date', label: 'Production Date', example: '2025-01-01', hint: 'YYYY-MM-DD (year-month-day) or blank, e.g. 2025-01-31 = 31 Jan 2025' },
+  { key: 'expiry_date', label: 'Expiry Date', example: '2027-01-01', hint: 'YYYY-MM-DD (year-month-day) or blank, e.g. 2027-01-01 = 1 Jan 2027' },
   { key: 'description', label: 'Description', example: 'Bulk lubricant' },
 ]
 
@@ -87,7 +89,8 @@ function cellToYmd(v: unknown): string {
 }
 
 function isBlankRow(row: ImportRow): boolean {
-  return Object.values(row).every(v => String(v ?? '').trim() === '')
+  // Blank = no value in any real data column. `rowNum` is bookkeeping, so ignore it.
+  return COLUMNS.every(c => String((row as unknown as Record<string, unknown>)[c.key] ?? '').trim() === '')
 }
 
 /** Parse an uploaded .xlsx / .csv into clean ImportRows (blank rows dropped). */
@@ -96,18 +99,30 @@ export async function parseImportFile(file: File): Promise<ImportRow[]> {
   const wb = XLSX.read(buf, { type: 'array', raw: true, cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]
   if (!ws) throw new Error('No readable sheet found in that file')
-  const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '', raw: true })
+  // header:1 keeps a strict 1:1 alignment with the sheet, so each parsed row can
+  // carry its true Excel row number (grid[0] = row 1 = the header).
+  const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: true })
+  if (grid.length < 2) return []
+
+  // Map each field to its column index in the header row.
+  const header = grid[0] || []
+  const colOf = new Map<keyof ImportRow, number>()
+  header.forEach((h, c) => {
+    const key = keyFromHeader(h)
+    if (key && !colOf.has(key)) colOf.set(key, c)
+  })
 
   const rows: ImportRow[] = []
-  for (const rec of records) {
+  for (let i = 1; i < grid.length; i++) {
+    const rec = grid[i] || []
     const out: Record<string, string | number> = {
       sku: '', name: '', specification: '', category: '', unit: '',
       quantity: '', min_threshold: '', max_threshold: '',
       bin_location: '', production_date: '', expiry_date: '', description: '',
+      rowNum: i + 1,
     }
-    for (const [header, value] of Object.entries(rec)) {
-      const key = keyFromHeader(header)
-      if (!key) continue
+    for (const [key, c] of colOf.entries()) {
+      const value = rec[c]
       if (key === 'production_date' || key === 'expiry_date') {
         out[key] = cellToYmd(value)
       } else if (key === 'quantity' || key === 'min_threshold' || key === 'max_threshold') {

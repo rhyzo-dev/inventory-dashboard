@@ -163,17 +163,22 @@ async function plan(env: any, rows: Record<string, unknown>[], userId: string, n
       return { row, index, clean: typeof out === 'string' ? null : out, error: typeof out === 'string' ? out : undefined }
     })
 
-  // 2) Load existing lot keys for the SKUs in this batch (bounded, so it's cheap).
+  // 2) Load existing lot keys for the SKUs in this batch.
+  //    Chunk the IN-list small: D1 caps bind variables per statement far below
+  //    SQLite's ~999, and one query with 127 SKUs hit "too many SQL variables".
+  //    20 per query (20 vars) is under any D1 cap; 127 SKUs → 7 cheap reads.
   const skus = [...new Set(normalized.filter(n => n.clean).map(n => n.clean!.sku))]
   const existing = new Set<string>()
-  if (skus.length) {
-    const inList = skus.map(() => '?').join(',')
+  const IN_CHUNK = 20
+  for (let i = 0; i < skus.length; i += IN_CHUNK) {
+    const group = skus.slice(i, i + IN_CHUNK)
+    const inList = group.map(() => '?').join(',')
     const res = await env.DB.prepare(
       `SELECT sku, COALESCE(name,'') as name, COALESCE(specification,'') as specification,
               COALESCE(bin_location,'') as bin_location,
               COALESCE(production_date,'') as production_date, COALESCE(expiry_date,'') as expiry_date
        FROM consumable_item WHERE sku IN (${inList})`
-    ).bind(...skus).all<{ sku: string; name: string; specification: string; bin_location: string; production_date: string; expiry_date: string }>()
+    ).bind(...group).all<{ sku: string; name: string; specification: string; bin_location: string; production_date: string; expiry_date: string }>()
     for (const r of res.results || []) existing.add(lotKey(r))
   }
 
@@ -247,35 +252,49 @@ export const onRequestPost: PagesFunction = async (context) => {
       }), { status: 200, headers: H })
     }
 
+    // Each row binds 19 values. D1 caps the total bind variables a single
+    // query may carry, and that cap is lower than expected — a 380-var batch
+    // AND a 570-var multi-row INSERT both hit "too many SQL variables". The
+    // only insert size guaranteed to clear any D1 limit is one row per
+    // statement (19 vars). ~150 rows = ~150 fast same-region D1 writes.
     const insertSql = `
       INSERT INTO consumable_item
         (id, facility_id, sku, name, description, category, unit, quantity, min_threshold, max_threshold,
          bin_location, production_date, expiry_date, image_url, creator_id, updater_id, created_at, updated_at, specification)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
-    const statements = p.creates.map((r) =>
-      env.DB.prepare(insertSql).bind(
+    let created = 0
+    for (const r of p.creates) {
+      await env.DB.prepare(insertSql).bind(
         crypto.randomUUID(),
         env.FACILITY_ID || null,
         r.sku, r.name, r.description || null, r.category || null, r.unit || null,
         r.quantity, r.min_threshold, r.max_threshold,
         r.bin_location || null, r.production_date, r.expiry_date,
         null, user.id, user.id, p.now, p.now, r.specification || null
-      )
-    )
-    await env.DB.batch(statements) // single transaction — all or nothing
+      ).run()
+      created++
+    }
 
     return new Response(JSON.stringify({
       dry_run: false,
-      created: p.creates.length,
+      created: created,
       skipped: p.summary.skip,
       errors: p.summary.error,
-      message: `Imported ${p.creates.length} item${p.creates.length === 1 ? '' : 's'}` +
+      message: `Imported ${created} item${created === 1 ? '' : 's'}` +
         (p.summary.skip ? `, skipped ${p.summary.skip} duplicate${p.summary.skip === 1 ? '' : 's'}` : '') +
         (p.summary.error ? `, ${p.summary.error} errored row${p.summary.error === 1 ? '' : 's'}` : ''),
     }), { status: 200, headers: H })
   } catch (error) {
-    console.error('Import POST error:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), { status: 500, headers: H })
+    console.error('Import POST error:', (error as any)?.stack || error)
+    const msg = String((error as any)?.message || error || '')
+    // The import route is auth-gated (editor+), so a short, specific hint is
+    // safe to surface and is far more useful to the operator than a bare 500.
+    let hint = 'Internal server error'
+    if (/too many|SQL variables/i.test(msg)) hint = 'Import is too large for one pass — split the spreadsheet into smaller files'
+    else if (/NOT NULL constraint/i.test(msg)) hint = 'A required field could not be written — check that facility config is set on this instance'
+    else if (/no such column/i.test(msg)) hint = 'Database schema is out of date — apply the latest migrations'
+    else if (/constraint|foreign key/i.test(msg)) hint = 'One or more rows failed a database constraint'
+    return new Response(JSON.stringify({ error: hint, detail: msg.slice(0, 240) }), { status: 500, headers: H })
   }
 }
